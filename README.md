@@ -27,7 +27,7 @@ Each endpoint lives at `https://your-app.vercel.app/h/<id>`. Any method and any 
 
 | Tab | What it does |
 | --- | --- |
-| Requests | Live list of captured requests. Tap one for body, query and headers, or copy it as cURL. |
+| Requests | Captured requests, updated when you tap Refresh (or tick Auto). Tap one for body, query and headers, or copy it as cURL. |
 | Response data | Pick generated data or a fixed body. Build the fields of each item, choose the data region (e.g. English, Nigeria), and wrap the reply in keys like `status` and `message`. |
 | Pagination | Total items, page sizes, page or offset style, parameter names, envelope or plain array. |
 | Status & headers | Status code, custom headers, delay, and whether requests are recorded. |
@@ -49,7 +49,7 @@ Saved changes go live within about 10 seconds (configs are cached briefly to sav
 
 - Recording one request uses 3 Upstash commands. Upstash's free tier gives 500K commands a month, so about 150K+ recorded requests.
 - Turning off *Record incoming requests* on mock-only endpoints makes them cost about 0 commands (just a config read every 10s or so).
-- The dashboard checks for new requests every 5 seconds, only while its tab is visible, at 1 command per check.
+- The dashboard checks for new requests once when you open an endpoint, then only when you tap **Refresh** (1 command per check). Tick **Auto** to check every 5 seconds while the tab is visible instead.
 - The last 100 requests per endpoint are kept. Change with the `HISTORY_LIMIT` environment variable.
 
 ## Run it on your computer

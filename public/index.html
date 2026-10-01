@@ -174,7 +174,7 @@ const ls = { get(k){ try { return localStorage.getItem(k); } catch { return null
 
 const S = {
   meta: null, endpoints: [], cfg: null, saved: '', tab: ls.get('mh.tab') || 'requests',
-  reqs: [], known: -1, selReq: null, pollTimer: null, live: true,
+  reqs: [], known: -1, selReq: null, pollTimer: null, live: ls.get('mh.live') === '1', lastCheck: null,
   key: ls.get('mh.key') || '',
   test: { method: 'GET', path: '', query: '', body: '', headers: '' , result: null },
 };
@@ -305,7 +305,7 @@ document.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.
 function startPoll() { stopPoll(); poll(); S.pollTimer = setInterval(() => { if (document.visibilityState === 'visible' && S.live) poll(); }, 5000); }
 function stopPoll() { clearInterval(S.pollTimer); S.pollTimer = null; }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.cfg && S.live) poll(); });
-async function poll() {
+async function poll(force) {
   if (!S.cfg) return;
   const id = S.cfg.id;
   try {
@@ -315,13 +315,13 @@ async function poll() {
     if (d.reset) S.reqs = d.requests;
     else if (d.requests.length) { fresh = d.requests; S.reqs = [...d.requests, ...S.reqs].slice(0, d.history || 100); }
     const changedCount = S.known !== d.count;
-    S.known = d.count;
+    S.known = d.count; S.lastCheck = Date.now();
     if (!S.selReq && S.reqs.length && window.innerWidth > 760) S.selReq = S.reqs[0].id;
-    if (changedCount) {
+    if (changedCount || force) {
       const pill = $('#reqPill'); if (pill) pill.textContent = d.count;
       if (S.tab === 'requests') renderRequests(new Set(fresh.map((r) => r.id)));
     }
-  } catch {}
+  } catch { if (force && S.tab === 'requests') renderRequests(); }
 }
 
 // ---------- main render ----------
@@ -367,10 +367,10 @@ function renderRequests(freshIds = new Set()) {
   const r = S.reqs.find((x) => x.id === S.selReq);
   body.innerHTML = `
     <div class="row" style="justify-content:space-between;margin-top:14px">
-      <span class="live ${S.live?'':'off'}"><i></i>${S.live ? 'Live, checks every 5s' : 'Paused'}</span>
+      <span class="live ${S.live?'':'off'}" id="liveStatus"><i></i>${S.live ? 'Auto-refreshing every 5s' : (S.lastCheck ? 'Last checked ' + ago(S.lastCheck) : 'Tap Refresh to check for new requests')}</span>
       <div class="row">
-        <button class="btn sm" id="liveBtn">${S.live ? 'Pause' : 'Resume'}</button>
-        <button class="btn sm" id="refreshBtn">Refresh</button>
+        <label class="chk" style="font-size:12.5px" title="Checks every 5 seconds while this tab is open. Uses more of your free allowance."><input type="checkbox" id="liveBtn" ${S.live?'checked':''}> Auto</label>
+        <button class="btn sm primary" id="refreshBtn">↻ Refresh</button>
         <button class="btn sm danger" id="clearBtn" ${S.reqs.length?'':'disabled'}>Clear</button>
       </div>
     </div>
@@ -384,8 +384,12 @@ function renderRequests(freshIds = new Set()) {
     S.selReq = it.dataset.id; renderRequests();
     if (window.innerWidth <= 760) $('#reqDetail').scrollIntoView({ behavior: 'smooth' });
   };
-  $('#liveBtn').onclick = () => { S.live = !S.live; if (S.live) poll(); renderRequests(); };
-  $('#refreshBtn').onclick = () => poll();
+  $('#liveBtn').onchange = (e) => { S.live = e.target.checked; ls.set('mh.live', S.live ? '1' : '0'); if (S.live) poll(); renderRequests(); };
+  $('#refreshBtn').onclick = async (e) => {
+    const b = e.currentTarget; b.disabled = true; b.textContent = 'Checking…';
+    const before = S.known; await poll(true);
+    toast(S.known > before && before >= 0 ? `${S.known - before} new request${S.known - before === 1 ? '' : 's'}` : 'No new requests');
+  };
   $('#clearBtn').onclick = async () => {
     if (!confirm('Clear all captured requests for this endpoint?')) return;
     await api('/api/requests?id=' + S.cfg.id, { method: 'DELETE' });
@@ -745,7 +749,11 @@ function showResult() {
   $('#tCopy').onclick = () => copy(r.body, 'Body copied');
 }
 
-setInterval(() => { if (S.tab === 'requests') document.querySelectorAll('.reqtime').forEach((el, i) => { const r = S.reqs[i]; if (r) el.textContent = ago(r.at); }); }, 15000);
+setInterval(() => {
+  if (S.tab !== 'requests') return;
+  document.querySelectorAll('.reqtime').forEach((el, i) => { const r = S.reqs[i]; if (r) el.textContent = ago(r.at); });
+  const st = $('#liveStatus'); if (st && !S.live && S.lastCheck) st.innerHTML = '<i></i>Last checked ' + ago(S.lastCheck);
+}, 15000);
 
 boot().catch((e) => { if (e.message !== 'auth') $('#app').innerHTML = `<div class="banner err">Couldn't load: ${esc(e.message)}</div>`; });
 })();
