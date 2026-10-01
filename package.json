@@ -1,0 +1,17 @@
+{
+  "name": "mockhook",
+  "version": "1.0.0",
+  "description": "Webhook catcher and mock API with fake data and pagination",
+  "scripts": {
+    "dev": "node dev.js"
+  },
+  "dependencies": {
+    "@faker-js/faker": "^10.6.0",
+    "@upstash/redis": "^1.39.0"
+  },
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  }
+}

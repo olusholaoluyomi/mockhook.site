@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mockhook</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230f766e'/><path d='M9 17a7 7 0 0 0 14 0V9' stroke='white' stroke-width='3' fill='none' stroke-linecap='round'/><circle cx='23' cy='8' r='2.5' fill='white'/></svg>">
+<style>
+:root{
+  --bg:#f6f7f5;--panel:#ffffff;--panel2:#f0f2ef;--line:#dfe3dd;--text:#18201c;--muted:#5f6b64;
+  --accent:#0f766e;--accent-ink:#ffffff;--accent-soft:#d9f0ec;--danger:#b42318;--danger-soft:#fde8e6;
+  --warn:#8a5a00;--warn-soft:#fff3d6;
+  --get:#1d6fd6;--post:#0f8a4b;--put:#b26b00;--patch:#7a4bc4;--delete:#c0362c;--other:#5f6b64;
+  --mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
+  --sans:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --r:10px;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#0e1311;--panel:#151b18;--panel2:#1b2320;--line:#27312c;--text:#e7ece9;--muted:#93a199;
+  --accent:#2dd4bf;--accent-ink:#04211d;--accent-soft:#123a35;--danger:#ff8a80;--danger-soft:#3a1714;
+  --warn:#f5c35b;--warn-soft:#382a0a;
+  --get:#6aa8ff;--post:#4ade80;--put:#fbbf24;--patch:#c4a1ff;--delete:#ff8a80;--other:#93a199;
+}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 var(--sans)}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px 120px}
+header.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.top .in{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;gap:10px;align-items:center}
+.brand{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:-.01em;white-space:nowrap}
+.brand svg{width:26px;height:26px}
+.grow{flex:1;min-width:0}
+select,input[type=text],input[type=number],input[type=password],textarea{
+  background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;min-width:0;outline:none}
+select:focus,input:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+textarea{font-family:var(--mono);font-size:13px;resize:vertical;min-height:90px}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:8px 12px;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn.danger{color:var(--danger)}
+.btn.danger:hover{background:var(--danger-soft);border-color:var(--danger)}
+.btn.sm{padding:4px 8px;font-size:12.5px}
+.btn.icon{padding:6px 8px}
+.btn:disabled{opacity:.5;cursor:default}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-top:14px}
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+label.f{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--muted);font-weight:500}
+label.chk{display:flex;gap:8px;align-items:center;cursor:pointer}
+label.chk input{width:16px;height:16px;accent-color:var(--accent)}
+h2{font-size:15px;margin:0 0 4px}
+h3{font-size:13px;margin:18px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.hint{font-size:12.5px;color:var(--muted);margin:2px 0 10px}
+
+.urlbox{display:flex;gap:8px;align-items:center;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 6px 6px 12px;min-width:0}
+.urlbox code{font-family:var(--mono);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.namefield{font-size:18px;font-weight:700;border:1px solid transparent;background:transparent;padding:4px 6px;margin-left:-6px;border-radius:6px}
+.namefield:hover{border-color:var(--line)}
+
+.tabs{display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--line);margin-top:16px;scrollbar-width:none}
+.tabs button{border:0;background:none;padding:10px 12px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap;font-weight:500}
+.tabs button.on{color:var(--text);border-bottom-color:var(--accent)}
+.pill{display:inline-block;min-width:18px;padding:0 6px;border-radius:99px;background:var(--panel2);font-size:11.5px;margin-left:4px;color:var(--muted)}
+
+.banner{border-radius:8px;padding:10px 12px;margin-top:12px;font-size:13px}
+.banner.warn{background:var(--warn-soft);color:var(--warn)}
+.banner.err{background:var(--danger-soft);color:var(--danger)}
+
+/* Requests */
+.reqs{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:14px;margin-top:14px}
+.reqlist{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;max-height:72vh;overflow-y:auto}
+.reqitem{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.reqitem:hover{background:var(--panel2)}
+.reqitem.on{background:var(--accent-soft)}
+.reqitem.new{animation:flash 1.4s ease}
+@keyframes flash{from{background:var(--accent-soft)}}
+.method{font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 6px;border-radius:5px;border:1px solid currentColor;min-width:52px;text-align:center}
+.m-GET{color:var(--get)}.m-POST{color:var(--post)}.m-PUT{color:var(--put)}.m-PATCH{color:var(--patch)}.m-DELETE{color:var(--delete)}.m-other{color:var(--other)}
+.reqpath{font-family:var(--mono);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.reqtime{font-size:11.5px;color:var(--muted);white-space:nowrap}
+.detail{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0}
+table.kv{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
+table.kv td{border-top:1px solid var(--line);padding:6px 8px;vertical-align:top;word-break:break-all;font-family:var(--mono)}
+table.kv td:first-child{width:34%;color:var(--muted)}
+pre.code{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;font:12.5px/1.5 var(--mono);margin:0;max-height:60vh;white-space:pre-wrap;word-break:break-word}
+.empty{padding:40px 16px;text-align:center;color:var(--muted)}
+.live{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.live i{width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 2s infinite}
+.live.off i{background:var(--muted);animation:none}
+@keyframes pulse{50%{opacity:.3}}
+
+/* Schema builder */
+.fields{display:flex;flex-direction:column;gap:8px}
+.field{border:1px solid var(--line);border-radius:9px;background:var(--panel);padding:10px}
+.field .head{display:grid;grid-template-columns:minmax(110px,1fr) minmax(150px,1.4fr) auto;gap:8px;align-items:center}
+.field .opts{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-top:8px}
+.field .opts label.f{font-size:11.5px}
+.children{margin:10px 0 2px 6px;padding-left:12px;border-left:2px solid var(--accent-soft);display:flex;flex-direction:column;gap:8px}
+.tools{display:flex;gap:4px}
+.tag{font-size:11px;color:var(--accent);font-weight:600}
+
+/* Save bar */
+.savebar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--panel);border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:none}
+.savebar.show{display:block}
+.savebar .in{max-width:1180px;margin:0 auto;display:flex;gap:10px;align-items:center}
+.toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:.2s;pointer-events:none;z-index:50}
+.toast.show{opacity:1}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:60;padding:16px}
+.modal.show{display:flex}
+.modal .box{background:var(--panel);border-radius:12px;padding:20px;width:100%;max-width:420px;border:1px solid var(--line)}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:760px){
+  .reqs,.split{grid-template-columns:1fr}
+  .reqlist{max-height:46vh}
+  .field .head{grid-template-columns:1fr 1fr}
+  .field .head .tools{grid-column:1/-1;justify-content:flex-end}
+  .hide-sm{display:none}
+}
+</style>
+</head>
+<body>
+<header class="top"><div class="in">
+  <div class="brand">
+    <svg viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="var(--accent)"/><path d="M9 17a7 7 0 0 0 14 0V9" stroke="var(--accent-ink)" stroke-width="3" fill="none" stroke-linecap="round"/><circle cx="23" cy="8" r="2.5" fill="var(--accent-ink)"/></svg>
+    <span class="hide-sm">Mockhook</span>
+  </div>
+  <div class="grow"><select id="epSelect" aria-label="Endpoint"></select></div>
+  <button class="btn primary" id="newBtn">＋ New</button>
+</div></header>
+
+<main class="wrap">
+  <div id="banners"></div>
+  <div id="app"></div>
+</main>
+
+<div class="savebar" id="savebar"><div class="in">
+  <span class="grow muted">Unsaved changes</span>
+  <button class="btn" id="discardBtn">Discard</button>
+  <button class="btn primary" id="saveBtn">Save</button>
+</div></div>
+
+<div class="modal" id="newModal"><div class="box">
+  <h2>New endpoint</h2>
+  <p class="hint">Leave the ID empty for a random one. A custom ID gives you a readable URL like /h/users.</p>
+  <label class="f">Name<input type="text" id="newName" placeholder="Users API"></label>
+  <label class="f" style="margin-top:10px">Custom ID (optional)<input type="text" id="newId" placeholder="users" autocapitalize="off"></label>
+  <label class="chk" style="margin-top:12px" id="copyWrap"><input type="checkbox" id="newCopy"> Copy settings from the current endpoint</label>
+  <div id="newErr" class="banner err" style="display:none"></div>
+  <div class="row" style="justify-content:flex-end;margin-top:16px">
+    <button class="btn" data-close>Cancel</button>
+    <button class="btn primary" id="createBtn">Create</button>
+  </div>
+</div></div>
+
+<div class="modal" id="authModal"><div class="box">
+  <h2>Dashboard password</h2>
+  <p class="hint">This dashboard is protected. Enter the DASHBOARD_PASSWORD you set on Vercel.</p>
+  <input type="password" id="authInput" autocomplete="current-password">
+  <div id="authErr" class="banner err" style="display:none">That password didn't work.</div>
+  <div class="row" style="justify-content:flex-end;margin-top:16px"><button class="btn primary" id="authBtn">Unlock</button></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const ls = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
+
+const S = {
+  meta: null, endpoints: [], cfg: null, saved: '', tab: ls.get('mh.tab') || 'requests',
+  reqs: [], known: -1, selReq: null, pollTimer: null, live: true,
+  key: ls.get('mh.key') || '',
+  test: { method: 'GET', path: '', query: '', body: '', headers: '' , result: null },
+};
+
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 1600); }
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', 'x-dashboard-key': S.key, ...(opts.headers || {}) } });
+  if (res.status === 401) { showAuth(true); throw new Error('auth'); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+const hookUrl = (id) => `${location.origin}/h/${id}`;
+const copy = async (text, msg = 'Copied') => { try { await navigator.clipboard.writeText(text); toast(msg); } catch { prompt('Copy this:', text); } };
+const ago = (t) => { const s = Math.round((Date.now() - t) / 1000); if (s < 5) return 'just now'; if (s < 60) return s + 's ago'; if (s < 3600) return Math.floor(s/60) + 'm ago'; if (s < 86400) return Math.floor(s/3600) + 'h ago'; return new Date(t).toLocaleDateString(); };
+const methodClass = (m) => ['GET','POST','PUT','PATCH','DELETE'].includes(m) ? 'm-' + m : 'm-other';
+
+// ---------- boot ----------
+async function boot() {
+  S.meta = await fetch('/api/meta', { headers: { 'x-dashboard-key': S.key } }).then((r) => r.json());
+  renderBanners();
+  if (S.meta.passwordRequired && !S.meta.authed) return showAuth(false);
+  await loadEndpoints();
+  const want = location.hash.slice(1) || ls.get('mh.last');
+  const pick = S.endpoints.find((e) => e.id === want) || S.endpoints[0];
+  if (pick) await openEndpoint(pick.id); else renderEmpty();
+}
+
+function renderBanners() {
+  const b = [];
+  if (S.meta.memory && S.meta.onVercel) b.push(`<div class="banner err"><b>Upstash isn't connected.</b> Vercel can't keep data in memory between requests, so nothing will save. Add Upstash Redis to this project (see the README) and redeploy.</div>`);
+  else if (S.meta.memory) b.push(`<div class="banner warn">Running with in-memory storage (local dev). Data resets when the server restarts.</div>`);
+  $('#banners').innerHTML = b.join('');
+}
+
+function showAuth(wrong) {
+  $('#authModal').classList.add('show');
+  $('#authErr').style.display = wrong && S.key ? 'block' : 'none';
+  setTimeout(() => $('#authInput').focus(), 50);
+}
+$('#authBtn').onclick = async () => {
+  S.key = $('#authInput').value; ls.set('mh.key', S.key);
+  $('#authModal').classList.remove('show'); boot().catch(() => {});
+};
+$('#authInput').onkeydown = (e) => { if (e.key === 'Enter') $('#authBtn').click(); };
+
+async function loadEndpoints() {
+  const d = await api('/api/endpoints');
+  S.endpoints = d.endpoints;
+  renderSelect();
+}
+function renderSelect() {
+  const sel = $('#epSelect');
+  sel.innerHTML = S.endpoints.length
+    ? S.endpoints.map((e) => `<option value="${esc(e.id)}">${esc(e.name)} · /h/${esc(e.id)}</option>`).join('')
+    : '<option>No endpoints yet</option>';
+  if (S.cfg) sel.value = S.cfg.id;
+}
+$('#epSelect').onchange = (e) => {
+  if (dirty() && !confirm('Discard unsaved changes?')) { e.target.value = S.cfg.id; return; }
+  openEndpoint(e.target.value);
+};
+
+function renderEmpty() {
+  stopPoll(); S.cfg = null; updateSaveBar();
+  $('#app').innerHTML = `<div class="card empty">
+    <h2 style="color:var(--text)">Create your first endpoint</h2>
+    <p>You'll get a URL that records every request sent to it and replies with fake data you design.</p>
+    <button class="btn primary" onclick="document.getElementById('newBtn').click()">＋ New endpoint</button></div>`;
+}
+
+async function openEndpoint(id) {
+  S.cfg = normalize(await api('/api/endpoints?id=' + encodeURIComponent(id)));
+  S.saved = JSON.stringify(S.cfg);
+  S.reqs = []; S.known = -1; S.selReq = null; S.test.result = null;
+  ls.set('mh.last', id); history.replaceState(null, '', '#' + id);
+  renderSelect(); render(); startPoll();
+}
+
+// Fill in defaults up front so simply viewing a tab never counts as an edit.
+function normalize(c) {
+  c.response ||= {}; c.response.headers ||= []; c.data ||= {}; c.pagination ||= {};
+  c.data.fields ||= []; c.data.wrap ||= { enabled: false, dataKey: 'data', fields: [] };
+  const walk = (list) => list.forEach((f) => {
+    f.opts ||= {};
+    for (const o of typeDef(f.type).opts || []) if (f.opts[o.name] === undefined) f.opts[o.name] = o.default;
+    if (typeDef(f.type).container) walk(f.children ||= []);
+  });
+  walk(c.data.fields);
+  return c;
+}
+
+// ---------- new endpoint ----------
+$('#newBtn').onclick = () => {
+  $('#newName').value = ''; $('#newId').value = ''; $('#newCopy').checked = false;
+  $('#copyWrap').style.display = S.cfg ? 'flex' : 'none';
+  $('#newErr').style.display = 'none';
+  $('#newModal').classList.add('show'); setTimeout(() => $('#newName').focus(), 50);
+};
+document.querySelectorAll('[data-close]').forEach((b) => b.onclick = () => b.closest('.modal').classList.remove('show'));
+$('#createBtn').onclick = async () => {
+  try {
+    const cfg = await api('/api/endpoints', { method: 'POST', body: JSON.stringify({
+      name: $('#newName').value.trim() || undefined, id: $('#newId').value.trim() || undefined,
+      copyFrom: $('#newCopy').checked && S.cfg ? S.cfg.id : undefined }) });
+    $('#newModal').classList.remove('show');
+    await loadEndpoints(); await openEndpoint(cfg.id); toast('Endpoint created');
+  } catch (e) { if (e.message !== 'auth') { $('#newErr').textContent = e.message; $('#newErr').style.display = 'block'; } }
+};
+
+// ---------- dirty / save ----------
+const dirty = () => S.cfg && JSON.stringify(S.cfg) !== S.saved;
+function updateSaveBar() { $('#savebar').classList.toggle('show', !!dirty()); }
+function changed() { updateSaveBar(); }
+$('#saveBtn').onclick = async () => {
+  try {
+    S.cfg = normalize(await api('/api/endpoints?id=' + S.cfg.id, { method: 'PUT', body: JSON.stringify(S.cfg) }));
+    S.saved = JSON.stringify(S.cfg); updateSaveBar();
+    const e = S.endpoints.find((x) => x.id === S.cfg.id); if (e) { e.name = S.cfg.name; renderSelect(); }
+    toast('Saved. Live within ~10 seconds');
+  } catch (e) { if (e.message !== 'auth') alert('Save failed: ' + e.message); }
+};
+$('#discardBtn').onclick = () => { S.cfg = JSON.parse(S.saved); render(); updateSaveBar(); };
+window.addEventListener('beforeunload', (e) => { if (dirty()) { e.preventDefault(); e.returnValue = ''; } });
+document.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 's' && dirty()) { e.preventDefault(); $('#saveBtn').click(); } });
+
+// ---------- polling (cheap: one counter read per poll) ----------
+function startPoll() { stopPoll(); poll(); S.pollTimer = setInterval(() => { if (document.visibilityState === 'visible' && S.live) poll(); }, 5000); }
+function stopPoll() { clearInterval(S.pollTimer); S.pollTimer = null; }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.cfg && S.live) poll(); });
+async function poll() {
+  if (!S.cfg) return;
+  const id = S.cfg.id;
+  try {
+    const d = await api(`/api/requests?id=${id}&known=${S.known}`);
+    if (!S.cfg || S.cfg.id !== id) return;
+    let fresh = [];
+    if (d.reset) S.reqs = d.requests;
+    else if (d.requests.length) { fresh = d.requests; S.reqs = [...d.requests, ...S.reqs].slice(0, d.history || 100); }
+    const changedCount = S.known !== d.count;
+    S.known = d.count;
+    if (!S.selReq && S.reqs.length && window.innerWidth > 760) S.selReq = S.reqs[0].id;
+    if (changedCount) {
+      const pill = $('#reqPill'); if (pill) pill.textContent = d.count;
+      if (S.tab === 'requests') renderRequests(new Set(fresh.map((r) => r.id)));
+    }
+  } catch {}
+}
+
+// ---------- main render ----------
+const TABS = [['requests','Requests'],['data','Response data'],['paging','Pagination'],['response','Status & headers'],['test','Test']];
+function render() {
+  if (!S.cfg) return renderEmpty();
+  const c = S.cfg, url = hookUrl(c.id);
+  $('#app').innerHTML = `
+  <div class="card">
+    <div class="row" style="justify-content:space-between">
+      <input class="namefield grow" id="epName" value="${esc(c.name)}" aria-label="Endpoint name">
+      <button class="btn sm danger" id="delEp">Delete</button>
+    </div>
+    <div class="urlbox" style="margin-top:10px"><code title="${esc(url)}">${esc(url)}</code>
+      <button class="btn sm" id="copyUrl">Copy URL</button></div>
+    <p class="hint" style="margin:8px 0 0">Any method and any sub-path works, e.g. <span class="mono">${esc(url)}/orders?page=2</span></p>
+  </div>
+  <nav class="tabs" id="tabs">${TABS.map(([k,l]) => `<button data-tab="${k}" class="${S.tab===k?'on':''}">${l}${k==='requests'?`<span class="pill" id="reqPill">${Math.max(S.known,0)}</span>`:''}</button>`).join('')}</nav>
+  <section id="tabBody"></section>`;
+  $('#epName').oninput = (e) => { c.name = e.target.value; changed(); };
+  $('#copyUrl').onclick = () => copy(url, 'URL copied');
+  $('#delEp').onclick = async () => {
+    if (!confirm(`Delete "${c.name}" and all its captured requests?`)) return;
+    await api('/api/endpoints?id=' + c.id, { method: 'DELETE' });
+    S.saved = ''; S.cfg = null; await loadEndpoints();
+    S.endpoints[0] ? openEndpoint(S.endpoints[0].id) : renderEmpty(); updateSaveBar();
+  };
+  $('#tabs').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; S.tab = b.dataset.tab; ls.set('mh.tab', S.tab); render(); };
+  ({ requests: renderRequests, data: renderData, paging: renderPaging, response: renderResponse, test: renderTest })[S.tab]();
+  updateSaveBar();
+}
+
+// ---------- Requests tab ----------
+function renderRequests(freshIds = new Set()) {
+  const body = $('#tabBody'); if (!body || S.tab !== 'requests') return;
+  const listHtml = S.reqs.length ? S.reqs.map((r) => `
+    <div class="reqitem ${r.id===S.selReq?'on':''} ${freshIds.has(r.id)?'new':''}" data-id="${r.id}">
+      <span class="method ${methodClass(r.method)}">${esc(r.method)}</span>
+      <span class="reqpath">${esc(r.path)}${Object.keys(r.query||{}).length ? '<span class="muted">?' + esc(new URLSearchParams(r.query).toString()) + '</span>' : ''}</span>
+      <span class="reqtime" title="${new Date(r.at).toLocaleString()}">${ago(r.at)}</span>
+    </div>`).join('') : `<div class="empty">Waiting for requests…<br><br><span class="mono" style="font-size:12px">curl -X POST ${esc(hookUrl(S.cfg.id))} -d '{"hello":"world"}'</span></div>`;
+
+  const r = S.reqs.find((x) => x.id === S.selReq);
+  body.innerHTML = `
+    <div class="row" style="justify-content:space-between;margin-top:14px">
+      <span class="live ${S.live?'':'off'}"><i></i>${S.live ? 'Live, checks every 5s' : 'Paused'}</span>
+      <div class="row">
+        <button class="btn sm" id="liveBtn">${S.live ? 'Pause' : 'Resume'}</button>
+        <button class="btn sm" id="refreshBtn">Refresh</button>
+        <button class="btn sm danger" id="clearBtn" ${S.reqs.length?'':'disabled'}>Clear</button>
+      </div>
+    </div>
+    ${S.cfg.capture === false ? '<div class="banner warn">Request recording is off for this endpoint (Status &amp; headers tab).</div>' : ''}
+    <div class="reqs">
+      <div class="reqlist" id="reqList">${listHtml}</div>
+      <div class="detail" id="reqDetail">${r ? requestDetail(r) : '<div class="empty">Select a request to see its details.</div>'}</div>
+    </div>`;
+  $('#reqList').onclick = (e) => {
+    const it = e.target.closest('.reqitem'); if (!it) return;
+    S.selReq = it.dataset.id; renderRequests();
+    if (window.innerWidth <= 760) $('#reqDetail').scrollIntoView({ behavior: 'smooth' });
+  };
+  $('#liveBtn').onclick = () => { S.live = !S.live; if (S.live) poll(); renderRequests(); };
+  $('#refreshBtn').onclick = () => poll();
+  $('#clearBtn').onclick = async () => {
+    if (!confirm('Clear all captured requests for this endpoint?')) return;
+    await api('/api/requests?id=' + S.cfg.id, { method: 'DELETE' });
+    S.reqs = []; S.known = 0; S.selReq = null; $('#reqPill').textContent = 0; renderRequests();
+  };
+  const cb = $('#copyCurl'); if (cb) cb.onclick = () => copy(toCurl(r), 'cURL copied');
+  const bb = $('#copyBody'); if (bb) bb.onclick = () => copy(r.body, 'Body copied');
+}
+
+function kvTable(obj) {
+  const e = Object.entries(obj || {});
+  if (!e.length) return '<p class="hint">None</p>';
+  return `<table class="kv">${e.map(([k,v]) => `<tr><td>${esc(k)}</td><td>${esc(typeof v === 'object' ? JSON.stringify(v) : v)}</td></tr>`).join('')}</table>`;
+}
+function prettyBody(r) {
+  if (!r.body) return '<p class="hint">Empty body</p>';
+  let txt = r.body;
+  try { txt = JSON.stringify(JSON.parse(r.body), null, 2); } catch {
+    if ((r.contentType||'').includes('x-www-form-urlencoded')) { try { txt = JSON.stringify(Object.fromEntries(new URLSearchParams(r.body)), null, 2); } catch {} }
+  }
+  return `<pre class="code">${esc(txt)}</pre>${r.truncated ? '<p class="hint">Body was cut off (too large to store in full).</p>' : ''}`;
+}
+function requestDetail(r) {
+  return `
+    <div class="row" style="justify-content:space-between">
+      <div class="row"><span class="method ${methodClass(r.method)}">${esc(r.method)}</span><span class="mono" style="word-break:break-all">${esc(r.path)}</span></div>
+      <button class="btn sm" id="copyCurl">Copy as cURL</button>
+    </div>
+    <div class="grid" style="margin-top:12px;grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
+      <div><div class="hint" style="margin:0">Time</div>${new Date(r.at).toLocaleString()}</div>
+      <div><div class="hint" style="margin:0">From IP</div><span class="mono">${esc(r.ip || '—')}</span></div>
+      <div><div class="hint" style="margin:0">Size</div>${r.size} bytes</div>
+      <div><div class="hint" style="margin:0">We replied</div>${r.responseStatus}</div>
+    </div>
+    <h3>Body ${r.body ? '<button class="btn sm" id="copyBody" style="margin-left:6px">Copy</button>' : ''}</h3>${prettyBody(r)}
+    <h3>Query</h3>${kvTable(r.query)}
+    <h3>Headers</h3>${kvTable(r.headers)}`;
+}
+function toCurl(r) {
+  const q = new URLSearchParams(r.query).toString();
+  let s = `curl -X ${r.method} '${hookUrl(S.cfg.id)}${r.path === '/' ? '' : r.path}${q ? '?' + q : ''}'`;
+  const skip = /^(host|content-length|connection|accept-encoding|via|cdn-loop|cf-|x-amz)/i;
+  for (const [k, v] of Object.entries(r.headers || {})) if (!skip.test(k)) s += ` \\\n  -H '${k}: ${String(v).replace(/'/g, "'\\''")}'`;
+  if (r.body) s += ` \\\n  --data-raw '${r.body.replace(/'/g, "'\\''")}'`;
+  return s;
+}
+
+// ---------- Response data tab (schema builder) ----------
+function typeOptions(selected) {
+  const groups = {};
+  for (const t of S.meta.types) (groups[t.group] ||= []).push(t);
+  return Object.entries(groups).map(([g, ts]) => `<optgroup label="${esc(g)}">${ts.map((t) => `<option value="${t.key}" ${t.key===selected?'selected':''}>${esc(t.label)}</option>`).join('')}</optgroup>`).join('');
+}
+const typeDef = (k) => S.meta.types.find((t) => t.key === k) || {};
+
+function renderData() {
+  const c = S.cfg, d = c.data, r = c.response;
+  const body = $('#tabBody');
+  body.innerHTML = `
+    <div class="card">
+      <h2>What the endpoint replies with</h2>
+      <div class="row" style="margin-top:10px">
+        <label class="chk"><input type="radio" name="mode" value="schema" ${r.mode!=='raw'?'checked':''}> Generated fake data</label>
+        <label class="chk"><input type="radio" name="mode" value="raw" ${r.mode==='raw'?'checked':''}> Fixed body I write myself</label>
+      </div>
+    </div>
+    <div id="modeBody"></div>`;
+  body.querySelectorAll('input[name=mode]').forEach((el) => el.onchange = () => { r.mode = el.value; changed(); renderData(); });
+  const mb = $('#modeBody');
+
+  if (r.mode === 'raw') {
+    mb.innerHTML = `<div class="card">
+      <label class="f">Content-Type<input type="text" id="rawCt" value="${esc(r.contentType || 'application/json')}"></label>
+      <label class="f" style="margin-top:10px">Body<textarea id="rawBody" rows="14">${esc(r.raw)}</textarea></label></div>`;
+    $('#rawCt').oninput = (e) => { r.contentType = e.target.value; changed(); };
+    $('#rawBody').oninput = (e) => { r.raw = e.target.value; changed(); };
+    return;
+  }
+
+  d.wrap ||= { enabled: false, dataKey: 'data', fields: [] };
+  mb.innerHTML = `
+    <div class="card">
+      <div class="grid">
+        <label class="f">Shape
+          <select id="dRoot">
+            <option value="list" ${d.root!=='object'?'selected':''}>List of items</option>
+            <option value="object" ${d.root==='object'?'selected':''}>Single object</option>
+          </select></label>
+        <label class="f" id="countWrap">Items (when pagination is off)<input type="number" id="dCount" min="0" max="1000" value="${esc(d.count ?? 10)}"></label>
+        <label class="f">Data style / region
+          <select id="dLocale">${Object.entries(S.meta.locales).map(([k,l]) => `<option value="${k}" ${k===d.locale?'selected':''}>${esc(l)}</option>`).join('')}</select></label>
+      </div>
+      <div class="row" style="margin-top:12px;gap:18px">
+        <label class="chk"><input type="checkbox" id="dConsistent" ${d.consistent?'checked':''}> Same data on every call</label>
+        <label class="chk"><input type="checkbox" id="dPretty" ${d.pretty!==false?'checked':''}> Pretty-print JSON</label>
+        ${d.consistent ? '<button class="btn sm" id="reshuffle">Reshuffle data</button>' : ''}
+      </div>
+      <p class="hint" style="margin-top:8px">${d.consistent ? 'Item #7 always looks the same, so page 2 never repeats page 1. Reshuffle gives a new consistent set.' : 'Brand new random values on every request.'}</p>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><h2>Fields</h2>
+        <button class="btn sm" id="addField">＋ Add field</button></div>
+      <p class="hint">Each item gets these fields. Use <b>Object</b> to nest fields and <b>List of items</b> for arrays. "Value from the request" echoes back things the caller sent.</p>
+      <div class="fields" id="fieldsRoot"></div>
+    </div>
+
+    <div class="card">
+      <label class="chk"><input type="checkbox" id="wrapOn" ${d.wrap.enabled?'checked':''}> <b>Wrap the response</b></label>
+      <p class="hint" style="margin:4px 0 0 24px">Add fixed top-level keys like status and message.</p>
+      <div id="wrapBody" style="${d.wrap.enabled?'':'display:none'}">
+        <p class="hint" style="margin-top:10px">With pagination on, these keys sit next to data/meta/links. Otherwise the generated data goes under the data key below. Values are parsed as JSON when possible (true, 200, "text").</p>
+        <label class="f" style="max-width:240px">Data key<input type="text" id="wrapKey" value="${esc(d.wrap.dataKey || 'data')}"></label>
+        <div id="wrapFields" style="margin-top:10px;display:flex;flex-direction:column;gap:8px"></div>
+        <button class="btn sm" id="wrapAdd" style="margin-top:8px">＋ Add key</button>
+      </div>
+    </div>`;
+
+  $('#countWrap').style.display = d.root === 'object' ? 'none' : '';
+  $('#dRoot').onchange = (e) => { d.root = e.target.value; changed(); renderData(); };
+  $('#dCount').oninput = (e) => { d.count = Number(e.target.value); changed(); };
+  $('#dLocale').onchange = (e) => { d.locale = e.target.value; changed(); };
+  $('#dConsistent').onchange = (e) => { d.consistent = e.target.checked; changed(); renderData(); };
+  $('#dPretty').onchange = (e) => { d.pretty = e.target.checked; changed(); };
+  const rs = $('#reshuffle'); if (rs) rs.onclick = () => { d.seedSalt = Math.random().toString(36).slice(2, 8); changed(); toast('New data set. Save to apply'); };
+  $('#addField').onclick = () => { d.fields.push({ name: 'field' + (d.fields.length + 1), type: 'lorem.word' }); changed(); renderFields($('#fieldsRoot'), d.fields, 0); };
+  renderFields($('#fieldsRoot'), d.fields, 0);
+
+  $('#wrapOn').onchange = (e) => { d.wrap.enabled = e.target.checked; changed(); $('#wrapBody').style.display = d.wrap.enabled ? '' : 'none'; };
+  $('#wrapKey').oninput = (e) => { d.wrap.dataKey = e.target.value; changed(); };
+  const renderWrap = () => {
+    $('#wrapFields').innerHTML = '';
+    d.wrap.fields.forEach((w, i) => {
+      const row = document.createElement('div'); row.className = 'row'; row.style.flexWrap = 'nowrap';
+      row.innerHTML = `<input type="text" placeholder="key" value="${esc(w.key)}"><input type="text" placeholder="value" value="${esc(w.value)}"><button class="btn icon danger" title="Remove">✕</button>`;
+      const [k, v] = row.querySelectorAll('input');
+      k.oninput = () => { w.key = k.value; changed(); }; v.oninput = () => { w.value = v.value; changed(); };
+      row.querySelector('button').onclick = () => { d.wrap.fields.splice(i, 1); changed(); renderWrap(); };
+      $('#wrapFields').appendChild(row);
+    });
+  };
+  $('#wrapAdd').onclick = () => { d.wrap.fields.push({ key: '', value: '' }); changed(); renderWrap(); };
+  renderWrap();
+}
+
+function renderFields(container, list, depth, parentIsArray) {
+  container.innerHTML = '';
+  if (!list.length) container.innerHTML = `<p class="hint">No fields yet.</p>`;
+  list.forEach((f, i) => {
+    const def = typeDef(f.type);
+    f.opts ||= {};
+    const el = document.createElement('div'); el.className = 'field';
+    const single = parentIsArray && list.length === 1;
+    el.innerHTML = `
+      <div class="head">
+        <input type="text" class="mono fname" placeholder="${single ? '(empty = plain values)' : 'field name'}" value="${esc(f.name)}" aria-label="Field name">
+        <select class="ftype" aria-label="Field type">${typeOptions(f.type)}</select>
+        <div class="tools">
+          <button class="btn icon" data-a="up" title="Move up" ${i===0?'disabled':''}>↑</button>
+          <button class="btn icon" data-a="down" title="Move down" ${i===list.length-1?'disabled':''}>↓</button>
+          <button class="btn icon" data-a="dup" title="Duplicate">⧉</button>
+          <button class="btn icon danger" data-a="del" title="Remove">✕</button>
+        </div>
+      </div>
+      <div class="opts"></div>
+      ${def.container ? `<div class="children"></div><button class="btn sm" data-a="addChild" style="margin-top:8px">＋ Add field inside ${esc(f.name || 'this')}</button>` : ''}`;
+
+    const opts = el.querySelector('.opts');
+    for (const o of def.opts || []) {
+      if (f.opts[o.name] === undefined) f.opts[o.name] = o.default;
+      const lab = document.createElement('label'); lab.className = 'f';
+      lab.innerHTML = `${esc(o.label)}<input type="${o.kind === 'number' ? 'number' : 'text'}" value="${esc(f.opts[o.name])}">`;
+      const inp = lab.querySelector('input');
+      inp.oninput = () => { f.opts[o.name] = o.kind === 'number' && inp.value !== '' ? Number(inp.value) : inp.value; changed(); };
+      opts.appendChild(lab);
+    }
+    const nl = document.createElement('label'); nl.className = 'f';
+    nl.innerHTML = `Sometimes null (%)<input type="number" min="0" max="100" value="${esc(f.nullPct || 0)}">`;
+    nl.querySelector('input').oninput = (e) => { f.nullPct = Number(e.target.value) || 0; changed(); };
+    opts.appendChild(nl);
+
+    el.querySelector('.fname').oninput = (e) => { f.name = e.target.value; changed(); };
+    el.querySelector('.ftype').onchange = (e) => {
+      f.type = e.target.value; f.opts = {};
+      if (typeDef(f.type).container && !f.children) f.children = [{ name: f.type === 'array' ? 'id' : 'key', type: f.type === 'array' ? 'uuid' : 'lorem.word' }];
+      changed(); renderFields(container, list, depth, parentIsArray);
+    };
+    el.querySelector('.tools').onclick = (e) => {
+      const a = e.target.closest('button')?.dataset.a; if (!a) return;
+      if (a === 'up' && i > 0) [list[i-1], list[i]] = [list[i], list[i-1]];
+      if (a === 'down' && i < list.length - 1) [list[i+1], list[i]] = [list[i], list[i+1]];
+      if (a === 'dup') list.splice(i + 1, 0, { ...clone(f), name: f.name ? f.name + '_copy' : '' });
+      if (a === 'del') list.splice(i, 1);
+      changed(); renderFields(container, list, depth, parentIsArray);
+    };
+    if (def.container) {
+      f.children ||= [];
+      const kids = el.querySelector('.children');
+      renderFields(kids, f.children, depth + 1, f.type === 'array');
+      el.querySelector('[data-a=addChild]').onclick = () => {
+        if (depth >= 5) return toast('Max nesting reached');
+        f.children.push({ name: 'field' + (f.children.length + 1), type: 'lorem.word' }); changed();
+        renderFields(kids, f.children, depth + 1, f.type === 'array');
+      };
+    }
+    container.appendChild(el);
+  });
+}
+
+// ---------- Pagination tab ----------
+function renderPaging() {
+  const p = S.cfg.pagination, d = S.cfg.data;
+  const body = $('#tabBody');
+  if (S.cfg.response.mode === 'raw' || d.root === 'object') {
+    body.innerHTML = `<div class="card empty">Pagination works when the reply is generated as a <b>list of items</b>.<br>Change it in the Response data tab.</div>`;
+    return;
+  }
+  const url = hookUrl(S.cfg.id);
+  const ex = p.style === 'offset' ? `${url}?${p.offsetParam||'offset'}=20&${p.limitParam||'limit'}=10` : `${url}?${p.pageParam||'page'}=3&${p.limitParam||'limit'}=10`;
+  body.innerHTML = `
+    <div class="card">
+      <label class="chk"><input type="checkbox" id="pOn" ${p.enabled?'checked':''}> <b>Paginate the list</b></label>
+      <div id="pBody" style="${p.enabled?'':'display:none'}">
+        <div class="grid" style="margin-top:14px">
+          <label class="f">Total items that "exist"<input type="number" id="pTotal" min="0" max="100000" value="${esc(p.total)}"></label>
+          <label class="f">Default page size<input type="number" id="pDef" min="1" value="${esc(p.defaultLimit)}"></label>
+          <label class="f">Max page size<input type="number" id="pMax" min="1" max="1000" value="${esc(p.maxLimit)}"></label>
+          <label class="f">Style
+            <select id="pStyle"><option value="page" ${p.style!=='offset'?'selected':''}>Page number (?page=2)</option><option value="offset" ${p.style==='offset'?'selected':''}>Offset (?offset=20)</option></select></label>
+        </div>
+        <h3>Query parameter names</h3>
+        <div class="grid">
+          ${p.style === 'offset'
+            ? `<label class="f">Offset param<input type="text" id="pOffP" value="${esc(p.offsetParam||'offset')}"></label>`
+            : `<label class="f">Page param<input type="text" id="pPageP" value="${esc(p.pageParam||'page')}"></label>`}
+          <label class="f">Limit param<input type="text" id="pLimP" value="${esc(p.limitParam||'limit')}"></label>
+        </div>
+        <h3>Response format</h3>
+        <div class="grid">
+          <label class="f">Format
+            <select id="pShape"><option value="envelope" ${p.shape!=='array'?'selected':''}>JSON envelope (data + meta + links)</option><option value="array" ${p.shape==='array'?'selected':''}>Plain array, paging info in headers</option></select></label>
+          ${p.shape !== 'array' ? `<label class="f">Items key<input type="text" id="pDataKey" value="${esc(p.dataKey||'data')}"></label>` : ''}
+        </div>
+        ${p.shape !== 'array' ? `<div class="row" style="margin-top:12px;gap:18px">
+          <label class="chk"><input type="checkbox" id="pMeta" ${p.includeMeta!==false?'checked':''}> Include meta (page, total, totalPages…)</label>
+          <label class="chk"><input type="checkbox" id="pLinks" ${p.includeLinks!==false?'checked':''}> Include links (next, prev, first, last)</label>
+        </div>` : '<p class="hint" style="margin-top:10px">Sends X-Total-Count, X-Total-Pages, X-Page/X-Offset, X-Limit and a Link header.</p>'}
+        <h3>Try it</h3>
+        <div class="urlbox"><code>${esc(ex)}</code><button class="btn sm" id="pCopy">Copy</button></div>
+      </div>
+    </div>`;
+  const bind = (id, key, n) => { const el = $('#' + id); if (el) el.oninput = el.onchange = () => { p[key] = el.type === 'checkbox' ? el.checked : (n ? Number(el.value) : el.value); changed(); }; };
+  $('#pOn').onchange = (e) => { p.enabled = e.target.checked; changed(); $('#pBody').style.display = p.enabled ? '' : 'none'; };
+  bind('pTotal','total',1); bind('pDef','defaultLimit',1); bind('pMax','maxLimit',1);
+  bind('pOffP','offsetParam'); bind('pPageP','pageParam'); bind('pLimP','limitParam');
+  bind('pDataKey','dataKey'); bind('pMeta','includeMeta'); bind('pLinks','includeLinks');
+  $('#pStyle').onchange = (e) => { p.style = e.target.value; changed(); renderPaging(); };
+  $('#pShape').onchange = (e) => { p.shape = e.target.value; changed(); renderPaging(); };
+  $('#pCopy').onclick = () => copy(ex);
+}
+
+// ---------- Status & headers tab ----------
+function renderResponse() {
+  const r = S.cfg.response;
+  r.headers ||= [];
+  const body = $('#tabBody');
+  body.innerHTML = `
+    <div class="card">
+      <div class="grid">
+        <label class="f">Status code<input type="number" id="rStatus" min="100" max="599" value="${esc(r.status)}"></label>
+        <label class="f">Delay before replying (ms, max 15000)<input type="number" id="rDelay" min="0" max="15000" value="${esc(r.delayMs || 0)}"></label>
+      </div>
+      <div class="row" style="margin-top:10px;gap:6px">${[200,201,204,400,401,403,404,422,429,500,503].map((s) => `<button class="btn sm" data-s="${s}">${s}</button>`).join('')}</div>
+      <label class="chk" style="margin-top:14px"><input type="checkbox" id="rCapture" ${S.cfg.capture!==false?'checked':''}> Record incoming requests</label>
+      <p class="hint">Turn off for endpoints you only use as a mock API. It saves Upstash usage (3 commands per request).</p>
+    </div>
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><h2>Response headers</h2><button class="btn sm" id="hAdd">＋ Add header</button></div>
+      <p class="hint">CORS headers are added automatically, so browsers can call your endpoint.</p>
+      <div id="hList" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>`;
+  $('#rStatus').oninput = (e) => { r.status = Number(e.target.value); changed(); };
+  $('#rDelay').oninput = (e) => { r.delayMs = Number(e.target.value); changed(); };
+  $('#rCapture').onchange = (e) => { S.cfg.capture = e.target.checked; changed(); };
+  body.querySelectorAll('[data-s]').forEach((b) => b.onclick = () => { r.status = Number(b.dataset.s); $('#rStatus').value = r.status; changed(); });
+  const draw = () => {
+    $('#hList').innerHTML = r.headers.length ? '' : '<p class="hint">No custom headers.</p>';
+    r.headers.forEach((h, i) => {
+      const row = document.createElement('div'); row.className = 'row'; row.style.flexWrap = 'nowrap';
+      row.innerHTML = `<input type="text" class="mono" placeholder="X-Header" value="${esc(h.key)}"><input type="text" class="mono" placeholder="value" value="${esc(h.value)}"><button class="btn icon danger">✕</button>`;
+      const [k, v] = row.querySelectorAll('input');
+      k.oninput = () => { h.key = k.value; changed(); }; v.oninput = () => { h.value = v.value; changed(); };
+      row.querySelector('button').onclick = () => { r.headers.splice(i, 1); changed(); draw(); };
+      $('#hList').appendChild(row);
+    });
+  };
+  $('#hAdd').onclick = () => { r.headers.push({ key: '', value: '' }); changed(); draw(); };
+  draw();
+}
+
+// ---------- Test tab ----------
+function renderTest() {
+  const t = S.test;
+  const body = $('#tabBody');
+  body.innerHTML = `
+    <div class="card">
+      <p class="hint" style="margin-top:0"><b>Preview</b> runs your current settings, including unsaved ones, without recording anything. <b>Send real request</b> calls the live URL with the last saved settings, and it shows up under Requests.</p>
+      <div class="grid" style="grid-template-columns:110px 1fr">
+        <label class="f">Method<select id="tMethod">${['GET','POST','PUT','PATCH','DELETE'].map((m) => `<option ${m===t.method?'selected':''}>${m}</option>`).join('')}</select></label>
+        <label class="f">Sub-path (optional)<input type="text" id="tPath" class="mono" placeholder="/users" value="${esc(t.path)}"></label>
+      </div>
+      <label class="f" style="margin-top:10px">Query string<input type="text" id="tQuery" class="mono" placeholder="page=2&limit=5&userId=42" value="${esc(t.query)}"></label>
+      <label class="f" style="margin-top:10px">Headers (one per line, Name: value)<textarea id="tHeaders" rows="2" placeholder="x-api-key: abc123">${esc(t.headers)}</textarea></label>
+      <label class="f" style="margin-top:10px">JSON body<textarea id="tBody" rows="4" placeholder='{"userId": 42}'>${esc(t.body)}</textarea></label>
+      <div class="row" style="margin-top:12px">
+        <button class="btn primary" id="tPreview">Preview</button>
+        <button class="btn" id="tSend">Send real request</button>
+      </div>
+    </div>
+    <div id="tResult"></div>`;
+  ['Method','Path','Query','Headers','Body'].forEach((k) => { const el = $('#t' + k); el.oninput = el.onchange = () => { t[k.toLowerCase()] = el.value; }; });
+  const parseHeaders = () => Object.fromEntries(t.headers.split('\n').map((l) => l.split(/:(.*)/s)).filter((p) => p[0].trim()).map(([k, v]) => [k.trim().toLowerCase(), (v || '').trim()]));
+  const parseBody = () => { if (!t.body.trim()) return {}; try { return JSON.parse(t.body); } catch { return t.body; } };
+  $('#tPreview').onclick = async () => {
+    try {
+      const out = await api('/api/preview', { method: 'POST', body: JSON.stringify({
+        config: S.cfg, method: t.method, path: t.path || '/', query: Object.fromEntries(new URLSearchParams(t.query)), body: parseBody(), headers: parseHeaders() }) });
+      t.result = { ...out, ms: null, label: 'Preview' }; showResult();
+    } catch (e) { if (e.message !== 'auth') { t.result = { error: e.message }; showResult(); } }
+  };
+  $('#tSend').onclick = async () => {
+    const path = t.path ? '/' + t.path.replace(/^\//, '') : '';
+    const url = hookUrl(S.cfg.id) + path + (t.query ? '?' + t.query.replace(/^\?/, '') : '');
+    const t0 = performance.now();
+    try {
+      const res = await fetch(url, { method: t.method, headers: { 'Content-Type': 'application/json', ...parseHeaders() }, body: ['GET','HEAD'].includes(t.method) ? undefined : t.body });
+      const text = await res.text();
+      t.result = { status: res.status, headers: Object.fromEntries(res.headers), body: text, ms: Math.round(performance.now() - t0), label: 'Live response' };
+      if (dirty()) t.result.note = 'You have unsaved changes, so this used the last saved settings.';
+      showResult(); setTimeout(poll, 400);
+    } catch (e) { t.result = { error: e.message }; showResult(); }
+  };
+  showResult();
+}
+function showResult() {
+  const r = S.test.result, el = $('#tResult'); if (!el) return;
+  if (!r) { el.innerHTML = ''; return; }
+  if (r.error) { el.innerHTML = `<div class="banner err">${esc(r.error)}</div>`; return; }
+  let pretty = r.body; try { pretty = JSON.stringify(JSON.parse(r.body), null, 2); } catch {}
+  const interesting = Object.entries(r.headers || {}).filter(([k]) => !/^access-control-|^date$|^server$|^connection$|^keep-alive$|^x-vercel|^strict-transport|^cache-control$|^age$/i.test(k));
+  el.innerHTML = `<div class="card">
+    <div class="row" style="justify-content:space-between"><h2>${esc(r.label)} · <span style="color:${r.status < 400 ? 'var(--post)' : 'var(--danger)'}">${r.status}</span>${r.ms != null ? ` <span class="muted" style="font-weight:400">· ${r.ms} ms</span>` : ''}</h2>
+    <button class="btn sm" id="tCopy">Copy body</button></div>
+    ${r.note ? `<div class="banner warn">${esc(r.note)}</div>` : ''}
+    ${interesting.length ? `<h3>Headers</h3>${kvTable(Object.fromEntries(interesting))}` : ''}
+    <h3>Body</h3><pre class="code">${esc(pretty)}</pre></div>`;
+  $('#tCopy').onclick = () => copy(r.body, 'Body copied');
+}
+
+setInterval(() => { if (S.tab === 'requests') document.querySelectorAll('.reqtime').forEach((el, i) => { const r = S.reqs[i]; if (r) el.textContent = ago(r.at); }); }, 15000);
+
+boot().catch((e) => { if (e.message !== 'auth') $('#app').innerHTML = `<div class="banner err">Couldn't load: ${esc(e.message)}</div>`; });
+})();
+</script>
+</body>
+</html>
