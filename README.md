@@ -4,7 +4,7 @@ Your own webhook.site, plus a mock API builder. Every endpoint:
 
 - **Records** every request sent to it (method, path, query, headers, body, IP) and shows it live in the dashboard.
 - **Replies** with fake data you design in a field builder, or a fixed body you write.
-- **Paginates** the fake data (`?page=2&limit=10` or `?offset=20&limit=10`), with meta, next/prev links, or paging headers.
+- **Paginates** the fake data (`?page=2&limit=10` or `?offset=20&limit=10`), with meta, next/prev links, or paging headers. Callers that page with POST can send `page`, `offset` and `limit` in a JSON or form body instead.
 - Lets you set the **status code, headers and a delay**, so you can test slow or failing APIs.
 
 ## Deploy to Vercel (free)
@@ -27,11 +27,11 @@ Each endpoint lives at `https://your-app.vercel.app/h/<id>`. Any method and any 
 
 | Tab | What it does |
 | --- | --- |
-| Requests | Captured requests, updated when you tap Refresh (or tick Auto). Tap one for body, query and headers, or copy it as cURL. |
+| Requests | Captured requests, updated when you tap Refresh (or tick Auto). Tap one for body, query and headers, or copy it as cURL. Only what the caller sent is shown. |
 | Response data | Pick generated data or a fixed body. Build the fields of each item, choose the data region (e.g. English, Nigeria), and wrap the reply in keys like `status` and `message`. |
 | Pagination | Total items, page sizes, page or offset style, parameter names, envelope or plain array. |
 | Status & headers | Status code, custom headers, delay, and whether requests are recorded. |
-| Test | Preview unsaved settings, or send a real request that shows up under Requests. |
+| Test | Preview unsaved settings, or send a real request that shows up under Requests. The path box accepts a query too, e.g. `/orders?page=2`. |
 
 Saved changes go live within about 10 seconds (configs are cached briefly to save Upstash usage).
 

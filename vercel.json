@@ -6,7 +6,6 @@
     "api/hook.js": { "maxDuration": 30 }
   },
   "rewrites": [
-    { "source": "/h/:id", "destination": "/api/hook?__id=:id" },
-    { "source": "/h/:id/:path*", "destination": "/api/hook?__id=:id&__path=:path*" }
+    { "source": "/h/(.*)", "destination": "/api/hook" }
   ]
 }

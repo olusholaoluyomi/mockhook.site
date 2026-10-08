@@ -450,6 +450,9 @@ const hookUrl = (id) => `${location.origin}/h/${id}`;
 const copy = async (text, msg = 'Copied') => { try { await navigator.clipboard.writeText(text); toast(msg); } catch { prompt('Copy this:', text); } };
 const ago = (t) => { const s = Math.round((Date.now() - t) / 1000); if (s < 5) return 'just now'; if (s < 60) return s + 's ago'; if (s < 3600) return Math.floor(s/60) + 'm ago'; if (s < 86400) return Math.floor(s/3600) + 'h ago'; return new Date(t).toLocaleDateString(); };
 const stamp = (t) => { const d = new Date(t); return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' · ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }); };
+// Query string for a captured request. A name sent more than once is stored as a list.
+const qsOf = (q) => { const u = new URLSearchParams(); for (const [k, v] of Object.entries(q || {})) for (const x of [].concat(v)) u.append(k, x); return u.toString(); };
+const pairs = (obj) => Object.entries(obj || {}).flatMap(([k, v]) => (Array.isArray(v) ? v.map((x) => [k, x]) : [[k, v]]));
 const tagClass = (m) => ['GET','POST','PUT','PATCH','DELETE'].includes(m) ? 't-' + m : 't-other';
 const statusBadge = (s) => `<span class="badge ${s < 300 ? 'b-green' : s < 400 ? 'b-blue' : s < 500 ? 'b-amber' : 'b-red'}">${s}</span>`;
 const sw = (id, on, label, sub) => `<label class="switch"><input type="checkbox" id="${id}" ${on ? 'checked' : ''}><span class="track"></span><span><span class="lbl">${label}</span>${sub ? `<span class="sub">${sub}</span>` : ''}</span></label>`;
@@ -725,14 +728,14 @@ function renderTabbar() {
 // ---------- Requests ----------
 function filtered() {
   const q = S.filter.q.toLowerCase(), m = S.filter.method;
-  return S.reqs.filter((r) => (!m || r.method === m) && (!q || (r.path + ' ' + new URLSearchParams(r.query).toString() + ' ' + (r.body || '') + ' ' + r.ip).toLowerCase().includes(q)));
+  return S.reqs.filter((r) => (!m || r.method === m) && (!q || (r.path + ' ' + qsOf(r.query) + ' ' + (r.body || '') + ' ' + r.ip).toLowerCase().includes(q)));
 }
 function renderRequests(freshIds = new Set()) {
   const body = $('#tabBody'); if (!body || S.tab !== 'requests') return;
   const list = filtered();
   const methods = [...new Set(S.reqs.map((r) => r.method))];
   const rows = list.map((r) => {
-    const qs = new URLSearchParams(r.query).toString();
+    const qs = qsOf(r.query);
     return `<div class="reqrow ${r.id === S.selReq ? 'on' : ''} ${freshIds.has(r.id) ? 'new' : ''}" data-id="${r.id}">
       <span class="tag ${tagClass(r.method)}">${esc(r.method)}</span>
       <div style="min-width:0"><div class="p">${esc(r.path)}</div><div class="q">${qs ? '?' + esc(qs) : esc(r.ip || r.id)}</div></div>
@@ -795,20 +798,38 @@ function renderRequests(freshIds = new Set()) {
 }
 
 function kvList(obj) {
-  const e = Object.entries(obj || {});
+  const e = Array.isArray(obj) ? obj : pairs(obj);
   if (!e.length) return '<p class="help" style="margin:0">None</p>';
   return `<div class="kv">${e.map(([k, v]) => `<div class="r"><span class="k">${esc(k)}</span><span class="v">${esc(typeof v === 'object' ? JSON.stringify(v) : v)}</span></div>`).join('')}</div>`;
 }
+// Form fields from a multipart body, so the boundary lines don't read as data.
+function multipartFields(r) {
+  const b = /multipart\/form-data/i.test(r.contentType || '') && /boundary=(?:"([^"]+)"|([^;\s]+))/i.exec(r.contentType);
+  if (!b) return null;
+  const out = [];
+  for (const part of r.body.split('--' + (b[1] || b[2])).slice(1)) {
+    if (part.startsWith('--')) break;
+    const cut = part.search(/\r?\n\r?\n/); if (cut < 0) continue;
+    const head = part.slice(0, cut), value = part.slice(cut).replace(/^\r?\n\r?\n/, '').replace(/\r?\n$/, '');
+    const name = /\bname="([^"]*)"/i.exec(head); if (!name) continue;
+    const file = /\bfilename="([^"]*)"/i.exec(head);
+    out.push([name[1], file ? `File: ${file[1] || 'unnamed'} (${(/content-type:\s*([^\r\n]+)/i.exec(head) || [])[1] || 'unknown type'})` : value]);
+  }
+  return out.length ? out : null;
+}
 function prettyBody(r) {
   if (!r.body) return '<p class="help" style="margin:0">Empty body</p>';
+  const cutOff = r.truncated ? '<p class="help">The body was cut off because it was too large to store in full.</p>' : '';
+  const fields = multipartFields(r);
+  if (fields) return `${kvList(fields)}<p class="help">Form fields from the multipart body. Copy gives the raw body.</p>${cutOff}`;
   let txt = r.body;
   try { txt = JSON.stringify(JSON.parse(r.body), null, 2); } catch {
     if ((r.contentType || '').includes('x-www-form-urlencoded')) { try { txt = JSON.stringify(Object.fromEntries(new URLSearchParams(r.body)), null, 2); } catch {} }
   }
-  return `<pre class="code">${esc(txt)}</pre>${r.truncated ? '<p class="help">The body was cut off because it was too large to store in full.</p>' : ''}`;
+  return `<pre class="code">${esc(txt)}</pre>${cutOff}`;
 }
 function requestDetail(r) {
-  const nq = Object.keys(r.query || {}).length, nh = Object.keys(r.headers || {}).length;
+  const nq = pairs(r.query).length, nh = pairs(r.headers).length;
   const d = S.detailTab;
   return `
     <div class="panel-head"><span>Request details</span><button class="btn sm" id="copyCurl">${ico('copy')}Copy as cURL</button></div>
@@ -830,7 +851,7 @@ function requestDetail(r) {
     </div>`;
 }
 function toCurl(r) {
-  const q = new URLSearchParams(r.query).toString();
+  const q = qsOf(r.query);
   let s = `curl -X ${r.method} '${hookUrl(S.cfg.id)}${r.path === '/' ? '' : r.path}${q ? '?' + q : ''}'`;
   const skip = /^(host|content-length|connection|accept-encoding|via|cdn-loop|cf-|x-amz)/i;
   for (const [k, v] of Object.entries(r.headers || {})) if (!skip.test(k)) s += ` \\\n  -H '${k}: ${String(v).replace(/'/g, "'\\''")}'`;
@@ -1117,13 +1138,13 @@ function renderTest() {
         <div class="reqbar">
           <select id="tMethod" aria-label="Method">${['GET','POST','PUT','PATCH','DELETE'].map((m) => `<option ${m === t.method ? 'selected' : ''}>${m}</option>`).join('')}</select>
           <div class="urlline" style="margin:0;padding:0 0 0 12px;background:var(--surface)"><span class="mono muted" style="font-size:13px;white-space:nowrap">/h/${esc(S.cfg.id)}</span>
-            <input type="text" id="tPath" class="mono" placeholder="/sub/path" value="${esc(t.path)}" style="border:0;box-shadow:none;background:transparent;padding-left:2px"></div>
+            <input type="text" id="tPath" class="mono" placeholder="/sub/path?page=2" value="${esc(t.path)}" style="border:0;box-shadow:none;background:transparent;padding-left:2px"></div>
         </div>
         <div class="seg full" id="tPane" style="margin-top:16px">${['query','headers','body'].map((k) => `<button data-p="${k}" class="${t.pane === k ? 'on' : ''}">${k[0].toUpperCase() + k.slice(1)}</button>`).join('')}</div>
         <div style="margin-top:12px">
-          <div class="${t.pane === 'query' ? '' : 'hidden'}"><input type="text" id="tQuery" class="mono" placeholder="page=2&limit=5&userId=42" value="${esc(t.query)}"><p class="help">Pagination and "Value from the request" fields read from here.</p></div>
+          <div class="${t.pane === 'query' ? '' : 'hidden'}"><input type="text" id="tQuery" class="mono" placeholder="page=2&limit=5&userId=42" value="${esc(t.query)}"><p class="help">Pagination and "Value from the request" fields read from here. A query typed after the path above works too.</p></div>
           <div class="${t.pane === 'headers' ? '' : 'hidden'}"><textarea id="tHeaders" rows="3" placeholder="x-api-key: abc123">${esc(t.headers)}</textarea><p class="help">One per line, as Name: value.</p></div>
-          <div class="${t.pane === 'body' ? '' : 'hidden'}"><textarea id="tBody" rows="5" placeholder='{"userId": 42}'>${esc(t.body)}</textarea><p class="help">JSON body, ignored for GET.</p></div>
+          <div class="${t.pane === 'body' ? '' : 'hidden'}"><textarea id="tBody" rows="5" placeholder='{"userId": 42}'>${esc(t.body)}</textarea><p class="help">JSON body, ignored for GET. Pagination also reads page and limit from here when they aren't in the query.</p></div>
         </div>
       </div>
       <div class="section row" style="justify-content:space-between">
@@ -1136,16 +1157,24 @@ function renderTest() {
   $('#tPane').onclick = (e) => { const b = e.target.closest('button'); if (b) { t.pane = b.dataset.p; renderTest(); } };
   const parseHeaders = () => Object.fromEntries(t.headers.split('\n').map((l) => l.split(/:(.*)/s)).filter((p) => p[0].trim()).map(([k, v]) => [k.trim().toLowerCase(), (v || '').trim()]));
   const parseBody = () => { if (!t.body.trim()) return {}; try { return JSON.parse(t.body); } catch { return t.body; } };
+  // The path box also takes a pasted URL or a query, e.g. "/orders?page=2", so nothing typed there is dropped.
+  const target = () => {
+    const typed = t.path.trim().replace(/#.*$/, '').replace(/^https?:\/\/[^/?]+/i, '').replace(new RegExp('^/h/' + S.cfg.id + '(?=[/?]|$)'), '');
+    const cut = typed.indexOf('?');
+    const sub = (cut < 0 ? typed : typed.slice(0, cut)).replace(/^\/+/, '');
+    const qs = [cut < 0 ? '' : typed.slice(cut + 1), t.query.trim().replace(/^\?/, '')].filter(Boolean).join('&');
+    return { path: sub ? '/' + sub : '', qs };
+  };
   $('#tPreview').onclick = async () => {
     try {
       const out = await api('/api/preview', { method: 'POST', body: JSON.stringify({
-        config: S.cfg, method: t.method, path: t.path || '/', query: Object.fromEntries(new URLSearchParams(t.query)), body: parseBody(), headers: parseHeaders() }) });
+        config: S.cfg, method: t.method, path: target().path || '/', query: Object.fromEntries(new URLSearchParams(target().qs)), body: ['GET','HEAD'].includes(t.method) ? {} : parseBody(), headers: parseHeaders() }) });
       t.result = { ...out, ms: null, label: 'Preview' }; showResult();
     } catch (e) { if (e.message !== 'auth') { t.result = { error: e.message }; showResult(); } }
   };
   $('#tSend').onclick = async () => {
-    const path = t.path ? '/' + t.path.replace(/^\//, '') : '';
-    const url = hookUrl(S.cfg.id) + path + (t.query ? '?' + t.query.replace(/^\?/, '') : '');
+    const { path, qs } = target();
+    const url = hookUrl(S.cfg.id) + path + (qs ? '?' + qs : '');
     const t0 = performance.now();
     try {
       const res = await fetch(url, { method: t.method, headers: { 'Content-Type': 'application/json', ...parseHeaders() }, body: ['GET','HEAD'].includes(t.method) ? undefined : t.body });

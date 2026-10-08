@@ -39,20 +39,32 @@ function parseBody(buf, contentType) {
   return text;
 }
 
+// Query names used only by our own routing, never sent by a caller.
+const ROUTING_PARAMS = new Set(['__id', '__path']);
+
+// Headers added by Vercel on the way in, not sent by the caller.
 const HIDDEN_HEADERS = /^(x-vercel-|x-real-ip$|forwarded$|x-forwarded-(host|port|proto|for)$|x-matched-path$)/;
 
 export default async function handler(req, res) {
   const u = new URL(req.url, 'http://local');
-  const query = Object.fromEntries(u.searchParams);
 
-  // Works whether Vercel hands us the rewritten URL (/api/hook?__id=…) or the original (/h/:id/…)
-  let id = query.__id, sub = query.__path;
-  if (!id) {
-    const m = u.pathname.match(/^\/h\/([^/]+)(\/.*)?$/);
-    if (m) { id = m[1]; sub = (m[2] || '').replace(/^\//, ''); }
-  }
-  delete query.__id; delete query.__path;
+  // The endpoint ID and sub-path come from the URL the caller used (/h/:id/…).
+  // /api/hook?__id=… is still understood, for older routing setups.
+  let id, sub;
+  const m = u.pathname.match(/^\/h\/([^/]+)(\/.*)?$/);
+  if (m) { id = m[1]; sub = (m[2] || '').replace(/^\//, ''); }
+  else { id = u.searchParams.get('__id'); sub = u.searchParams.get('__path'); }
   const subPath = sub ? '/' + sub : '';
+
+  // Keep only the query the caller sent. `query` holds one value per name and feeds
+  // pagination and "value from the request" fields; `sentQuery` is what gets recorded,
+  // with a repeated name (?tag=a&tag=b) kept as a list.
+  const query = {}, sentQuery = {};
+  for (const [k, v] of u.searchParams) {
+    if (ROUTING_PARAMS.has(k)) continue;
+    query[k] = v;
+    sentQuery[k] = Object.hasOwn(sentQuery, k) ? [].concat(sentQuery[k], v) : v;
+  }
 
   const cors = corsHeaders(req);
   const finish = (status, headers, body) => {
@@ -97,7 +109,7 @@ export default async function handler(req, res) {
       at: Date.now(),
       method: req.method,
       path: subPath || '/',
-      query,
+      query: sentQuery,
       headers,
       ip,
       contentType,
