@@ -9,6 +9,7 @@ const routes = {
   '/api/requests': './api/requests.js',
   '/api/preview': './api/preview.js',
   '/api/meta': './api/meta.js',
+  '/api/auth': './api/auth.js',
   '/api/hook': './api/hook.js',
 };
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
