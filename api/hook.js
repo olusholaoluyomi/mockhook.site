@@ -1,6 +1,8 @@
 import { redis, KEYS, HISTORY } from '../lib/redis.js';
 import { buildResponse } from '../lib/generate.js';
-import { readRaw, newId, validId, MAX_STORED_BODY } from '../lib/http.js';
+import { readRaw, newId, validId, clientIp, MAX_STORED_BODY } from '../lib/http.js';
+
+const MAX_STORED_BINARY = 48 * 1024; // bytes of a non-text body kept (about 64 KB once encoded)
 
 // Short in-memory cache of endpoint configs. Warm instances reuse it, which
 // saves one Upstash command per request. Edits show up within CACHE_MS.
@@ -12,6 +14,9 @@ async function loadConfig(id) {
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.cfg;
   const raw = await redis.get(KEYS.ep(id));
   const cfg = raw ? JSON.parse(raw) : null;
+  // Only endpoints that exist are remembered. Remembering "not found" would make a
+  // new endpoint answer 404 if its URL had been called just before it was created.
+  if (!cfg) { cache.delete(id); return null; }
   cache.set(id, { cfg, at: Date.now() });
   if (cache.size > 500) cache.delete(cache.keys().next().value);
   return cfg;
@@ -39,6 +44,12 @@ function parseBody(buf, contentType) {
   return text;
 }
 
+// Endpoint replies are written by whoever owns the endpoint and share a web address with
+// the dashboard. These headers make a browser treat any reply opened as a page as a
+// stranger to this site: its scripts can't read another person's sign-in or call the
+// dashboard as them. Programs calling the endpoint as an API are unaffected.
+const ISOLATION = { 'Content-Security-Policy': 'sandbox', 'X-Content-Type-Options': 'nosniff' };
+
 // Query names used only by our own routing, never sent by a caller.
 const ROUTING_PARAMS = new Set(['__id', '__path']);
 
@@ -54,6 +65,7 @@ export default async function handler(req, res) {
   const m = u.pathname.match(/^\/h\/([^/]+)(\/.*)?$/);
   if (m) { id = m[1]; sub = (m[2] || '').replace(/^\//, ''); }
   else { id = u.searchParams.get('__id'); sub = u.searchParams.get('__path'); }
+  id = String(id || '').toLowerCase(); // IDs are stored in lower case; /h/Orders means /h/orders
   const subPath = sub ? '/' + sub : '';
 
   // Keep only the query the caller sent. `query` holds one value per name and feeds
@@ -69,7 +81,9 @@ export default async function handler(req, res) {
   const cors = corsHeaders(req);
   const finish = (status, headers, body) => {
     res.statusCode = status;
-    for (const [k, v] of Object.entries({ ...cors, ...headers })) res.setHeader(k, v);
+    for (const [k, v] of Object.entries({ ...cors, ...headers, ...ISOLATION })) {
+      try { res.setHeader(k, v); } catch { /* a header Node refuses is skipped, never fatal */ }
+    }
     res.end(req.method === 'HEAD' ? undefined : body);
   };
 
@@ -85,7 +99,7 @@ export default async function handler(req, res) {
 
   const headers = {};
   for (const [k, v] of Object.entries(req.headers)) if (!HIDDEN_HEADERS.test(k)) headers[k] = v;
-  const ip = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').split(',')[0].trim();
+  const ip = clientIp(req);
 
   const proto = req.headers['x-forwarded-proto'] || (req.socket?.encrypted ? 'https' : 'http');
   const host = req.headers['x-forwarded-host'] || req.headers.host;
@@ -103,7 +117,11 @@ export default async function handler(req, res) {
 
   const tasks = [];
   if (cfg.capture !== false) {
-    const bodyText = buf.toString('utf8');
+    // Text is kept as text. Anything else (a file, an image) is kept as base64 so the
+    // exact bytes can be downloaded again instead of being mangled into text.
+    const isText = Buffer.from(buf.toString('utf8'), 'utf8').equals(buf);
+    const bodyText = isText ? buf.toString('utf8') : buf.subarray(0, MAX_STORED_BINARY).toString('base64');
+    const tooLong = isText ? bodyText.length > MAX_STORED_BODY : buf.length > MAX_STORED_BINARY;
     const record = {
       id: newId(12),
       at: Date.now(),
@@ -114,8 +132,9 @@ export default async function handler(req, res) {
       ip,
       contentType,
       size: size ?? buf.length,
-      body: bodyText.length > MAX_STORED_BODY ? bodyText.slice(0, MAX_STORED_BODY) : bodyText,
-      truncated: truncated || bodyText.length > MAX_STORED_BODY,
+      body: isText && tooLong ? bodyText.slice(0, MAX_STORED_BODY) : bodyText,
+      ...(isText ? {} : { encoding: 'base64' }),
+      truncated: truncated || tooLong,
       responseStatus: out.status,
     };
     tasks.push(

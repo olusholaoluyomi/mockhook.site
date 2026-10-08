@@ -168,6 +168,8 @@ input.sm,select.sm{height:34px;font-size:13px}
 .topitem{display:flex;align-items:center;gap:10px;padding:0 20px;border-left:1px solid var(--border)}
 .topitem .k{font-weight:500;line-height:1.2}
 .topitem .v{color:var(--text-2);line-height:1.2;font-size:13px}
+.topitem .acct .k{font-size:13px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.topitem .acct .link{font-size:12.5px;white-space:nowrap}
 .dot{width:8px;height:8px;border-radius:50%;background:var(--brand);flex:none}
 .dot.off{background:var(--red-icon)}
 .dot.warn{background:#f59f0a}
@@ -304,7 +306,7 @@ pre.code{margin:0;background:var(--sunken);border-radius:var(--r);padding:14px;o
 }
 @media (max-width:640px){
   .topitem{padding:0 14px}
-  .topitem .txt{display:none}
+  .topitem .txt,.topitem .acct .k{display:none}
   .opts2,.tpl-grid{grid-template-columns:1fr}
   .tpl{min-height:0}
   .fcard .head{grid-template-columns:28px 1fr auto}
@@ -335,6 +337,7 @@ pre.code{margin:0;background:var(--sunken);border-radius:var(--r);padding:14px;o
     <div class="topitem" id="storageItem" title="Where endpoints and requests are stored"></div>
     <div class="topitem hide-md"><span class="txt"><div class="k">Endpoints</div><div class="v" id="epCountTop">0</div></span></div>
     <div class="topitem"><button class="btn primary sm" id="newBtnTop"><svg class="i"><use href="#i-plus"/></svg><span class="txt">Create</span></button></div>
+    <div class="topitem hidden" id="accountItem"></div>
   </div>
 </header>
 
@@ -374,15 +377,24 @@ pre.code{margin:0;background:var(--sunken);border-radius:var(--r);padding:14px;o
   <div class="mfoot"><button class="btn" data-close>Cancel</button><button class="btn primary" id="createBtn">Create endpoint</button></div>
 </div></div>
 
-<!-- Password -->
+<!-- Sign in / create account -->
 <div class="modal" id="authModal"><div class="box sm">
-  <div class="mhead"><h2>Enter dashboard password</h2></div>
-  <div class="mbody">
-    <p class="help" style="margin:0 0 14px">This dashboard is protected by the DASHBOARD_PASSWORD set on Vercel.</p>
-    <input type="password" id="authInput" autocomplete="current-password" placeholder="Password">
-    <div id="authErr" class="banner err hidden" style="margin:12px 0 0">That password didn't work.</div>
-  </div>
-  <div class="mfoot"><button class="btn primary" id="authBtn">Unlock</button></div>
+  <div class="mhead"><h2 id="authTitle">Sign in</h2></div>
+  <form id="authForm" autocomplete="on">
+    <div class="mbody">
+      <p class="help" style="margin:0 0 16px" id="authIntro"></p>
+      <label class="field-label" for="authUser">Username</label>
+      <input type="text" id="authUser" name="username" class="mono" autocomplete="username" autocapitalize="off" spellcheck="false" maxlength="30">
+      <label class="field-label" for="authPass" style="margin-top:14px">Password</label>
+      <input type="password" id="authPass" name="password" autocomplete="current-password" maxlength="200">
+      <p class="help hidden" id="authHint">At least 8 characters. There is no password reset, so keep it somewhere safe.</p>
+      <div id="authErr" class="banner err hidden" style="margin:14px 0 0"></div>
+    </div>
+    <div class="mfoot" style="justify-content:space-between;align-items:center">
+      <button type="button" class="link" id="authSwitch"></button>
+      <button type="submit" class="btn primary" id="authBtn">Sign in</button>
+    </div>
+  </form>
 </div></div>
 
 <div class="toast" id="toast"></div>
@@ -432,7 +444,7 @@ const S = {
   meta: null, endpoints: [], cfg: null, saved: '', tab: ls.get('mh.tab') || 'requests',
   reqs: [], known: -1, selReq: null, pollTimer: null, live: ls.get('mh.live') === '1', lastCheck: null,
   filter: { q: '', method: '' }, detailTab: 'body',
-  key: ls.get('mh.key') || '',
+  token: ls.get('mh.token') || '', authMode: ls.get('mh.user') ? 'login' : 'register', // returning visitors sign in, new ones sign up
   test: { method: 'GET', path: '', query: '', body: '', headers: '', pane: 'query', result: null },
   create: { start: 'blank', tpl: null },
 };
@@ -440,8 +452,8 @@ const TABS = [['requests','Requests','list'],['data','Response','braces'],['pagi
 
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 1800); }
 async function api(path, opts = {}) {
-  const res = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', 'x-dashboard-key': S.key, ...(opts.headers || {}) } });
-  if (res.status === 401) { showAuth(true); throw new Error('auth'); }
+  const res = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + S.token, ...(opts.headers || {}) } });
+  if (res.status === 401 && !opts.auth) { signedOut(); throw new Error('auth'); }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
@@ -468,9 +480,10 @@ const typeChip = (k) => { const d = typeDef(k); const [c, i] = k === 'array' ? [
 
 // ---------- boot ----------
 async function boot() {
-  S.meta = await fetch('/api/meta', { headers: { 'x-dashboard-key': S.key } }).then((r) => r.json());
+  S.meta = await fetch('/api/meta', { headers: { Authorization: 'Bearer ' + S.token } }).then((r) => r.json());
   renderTop();
-  if (S.meta.passwordRequired && !S.meta.authed) return showAuth(false);
+  if (!S.meta.user) return signedOut();
+  $('#authModal').classList.remove('show');
   await loadEndpoints();
   const want = location.hash.slice(1) || ls.get('mh.last');
   const pick = S.endpoints.find((e) => e.id === want) || S.endpoints[0];
@@ -481,19 +494,83 @@ function renderTop() {
   const m = S.meta;
   const state = m.memory && m.onVercel ? ['off', 'Not connected'] : m.memory ? ['warn', 'In memory (local)'] : ['', 'Upstash Redis'];
   $('#storageItem').innerHTML = `<span class="dot ${state[0]}"></span><span class="txt"><div class="k">Storage</div><div class="v">${state[1]}</div></span>`;
+  const acct = $('#accountItem');
+  acct.classList.toggle('hidden', !m.user);
+  $('#newBtnTop').closest('.topitem').classList.toggle('hidden', !m.user);
+  if (m.user) {
+    acct.innerHTML = `<span class="chip c-green hide-md">${ico('user')}</span><span class="acct"><div class="k mono" title="Signed in as ${esc(m.user)}">${esc(m.user)}</div><button class="link" id="signOut">Sign out</button></span>`;
+    $('#signOut').onclick = signOut;
+  }
   const b = [];
   if (m.memory && m.onVercel) b.push(`<div class="banner err">${ico('alert')}<div><b>Upstash isn't connected.</b> Vercel can't keep data in memory between requests, so nothing will save. Connect Upstash Redis to this project and redeploy.</div></div>`);
   else if (m.memory) b.push(`<div class="banner warn">${ico('alert')}<div>Running with in-memory storage for local development. Data resets when the server restarts.</div></div>`);
+  // Endpoints made before accounts existed wait here until their owner takes them.
+  if (m.user && m.legacy) b.push(`<div class="banner info" id="importBanner">${ico('db')}<div style="flex:1">
+      <b>${m.legacy} endpoint${m.legacy === 1 ? '' : 's'} from before accounts existed.</b> ${m.legacyNeedsPassword ? 'Enter the old dashboard password to move them into your account.' : 'Move them into your account to keep using them.'}
+      <form class="row" id="importForm" style="margin-top:10px">
+        ${m.legacyNeedsPassword ? '<input type="password" id="importPass" placeholder="Old dashboard password" autocomplete="off" style="max-width:260px">' : ''}
+        <button class="btn sm" type="submit">Move to my account</button>
+      </form><div id="importErr" class="hidden" style="margin-top:8px;color:var(--red-text)"></div></div></div>`);
   $('#banners').innerHTML = b.join('');
+  const f = $('#importForm');
+  if (f) f.onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const d = await api('/api/auth', { method: 'POST', auth: true, body: JSON.stringify({ action: 'import', password: $('#importPass')?.value }) });
+      toast(`${d.imported} endpoint${d.imported === 1 ? '' : 's'} moved to your account`);
+      S.cfg = null; await boot();
+    } catch (err) { const el = $('#importErr'); el.textContent = err.message; el.classList.remove('hidden'); }
+  };
 }
 
-function showAuth(wrong) {
-  $('#authModal').classList.add('show');
-  $('#authErr').classList.toggle('hidden', !(wrong && S.key));
-  setTimeout(() => $('#authInput').focus(), 50);
+// ---------- accounts ----------
+function signedOut() {
+  stopPoll(); S.token = ''; ls.set('mh.token', ''); S.cfg = null; S.saved = ''; S.endpoints = [];
+  if (S.meta) { S.meta.user = null; renderTop(); }
+  renderNav(); updateSaveBar();
+  $('#newModal').classList.remove('show');
+  $('#app').innerHTML = `<div class="card empty" style="padding:64px 20px">
+    <span class="chip c-green">${ico('webhook')}</span>
+    <h3>Catch webhooks and mock any API</h3>
+    <p style="max-width:460px;margin:0 auto 18px">Create an account to get your own URLs. Each one records every request sent to it and replies with data you design. Only you can see your endpoints.</p>
+    <div class="row" style="justify-content:center"><button class="btn primary" id="landCreate">Create account</button><button class="btn" id="landLogin">Sign in</button></div></div>`;
+  $('#landCreate').onclick = () => showAuth('register'); $('#landLogin').onclick = () => showAuth('login');
+  showAuth(S.authMode);
 }
-$('#authBtn').onclick = () => { S.key = $('#authInput').value; ls.set('mh.key', S.key); $('#authModal').classList.remove('show'); boot().catch(() => {}); };
-$('#authInput').onkeydown = (e) => { if (e.key === 'Enter') $('#authBtn').click(); };
+function showAuth(mode) {
+  const canJoin = !S.meta || S.meta.signups !== false;
+  S.authMode = mode === 'register' && canJoin ? 'register' : 'login';
+  const reg = S.authMode === 'register';
+  $('#authTitle').textContent = reg ? 'Create your account' : 'Sign in';
+  $('#authIntro').textContent = reg ? 'Pick a username and password. Your endpoints and their requests are visible only to you.' : 'Sign in to see your endpoints.';
+  $('#authBtn').textContent = reg ? 'Create account' : 'Sign in';
+  $('#authSwitch').textContent = reg ? 'I already have an account' : 'Create an account';
+  $('#authSwitch').classList.toggle('hidden', !reg && !canJoin);
+  $('#authHint').classList.toggle('hidden', !reg);
+  $('#authPass').autocomplete = reg ? 'new-password' : 'current-password';
+  $('#authErr').classList.add('hidden');
+  if (!$('#authUser').value) $('#authUser').value = ls.get('mh.user') || '';
+  $('#authModal').classList.add('show');
+  setTimeout(() => ($('#authUser').value ? $('#authPass') : $('#authUser')).focus(), 50);
+}
+$('#authSwitch').onclick = () => showAuth(S.authMode === 'register' ? 'login' : 'register');
+$('#authForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const btn = $('#authBtn'); btn.disabled = true;
+  try {
+    const d = await api('/api/auth', { method: 'POST', auth: true, body: JSON.stringify({ action: S.authMode, username: $('#authUser').value, password: $('#authPass').value }) });
+    S.token = d.token; ls.set('mh.token', d.token); ls.set('mh.user', d.user); $('#authPass').value = '';
+    await boot();
+    toast(S.authMode === 'register' ? 'Account created' : 'Signed in');
+  } catch (err) { const el = $('#authErr'); el.textContent = err.message === 'Failed to fetch' ? "Couldn't reach the server. Try again." : err.message; el.classList.remove('hidden'); }
+  btn.disabled = false;
+};
+async function signOut() {
+  if (dirty() && !confirm('Sign out and discard unsaved changes?')) return;
+  S.saved = ''; S.cfg = null;
+  try { await api('/api/auth', { method: 'POST', auth: true, body: JSON.stringify({ action: 'logout' }) }); } catch {}
+  S.authMode = 'login'; signedOut(); toast('Signed out');
+}
 
 async function loadEndpoints() {
   const d = await api('/api/endpoints');
@@ -501,15 +578,15 @@ async function loadEndpoints() {
   renderNav();
 }
 function renderNav() {
-  const n = S.endpoints.length;
+  const n = S.endpoints.length, signedIn = !!S.meta?.user;
   $('#epCountTop').textContent = n;
-  $('#sideCount').textContent = n ? `${n} endpoint${n === 1 ? '' : 's'}` : 'None yet';
+  $('#sideCount').textContent = n ? `${n} endpoint${n === 1 ? '' : 's'}` : signedIn ? 'None yet' : 'Signed out';
   $('#sideList').innerHTML = S.endpoints.map((e) => `
     <div class="side-item ${S.cfg && S.cfg.id === e.id ? 'on' : ''}" data-id="${esc(e.id)}">
       <span class="chip ${S.cfg && S.cfg.id === e.id ? 'c-green' : 'c-gray'}">${ico('webhook')}</span>
       <div style="min-width:0;flex:1"><div class="n">${esc(e.name)}</div><div class="p">/h/${esc(e.id)}</div></div>
       ${e.count ? `<span class="count">${e.count > 999 ? '999+' : e.count}</span>` : ''}
-    </div>`).join('') || `<p class="help" style="padding:0 10px">Create one to get a URL.</p>`;
+    </div>`).join('') || `<p class="help" style="padding:0 10px">${signedIn ? 'Create one to get a URL.' : 'Sign in to see your endpoints.'}</p>`;
   const sel = $('#epSelect');
   sel.innerHTML = n ? S.endpoints.map((e) => `<option value="${esc(e.id)}">${esc(e.name)} · /h/${esc(e.id)}</option>`).join('') : '<option>No endpoints yet</option>';
   if (S.cfg) sel.value = S.cfg.id;
@@ -597,13 +674,13 @@ function openCreate() {
 }
 function updateUrlHint() { const v = $('#newId').value.trim().toLowerCase(); $('#newUrlHint').innerHTML = v ? `Your URL: <span class="mono">${esc(location.origin)}/h/${esc(v)}</span>` : 'Leave the ID empty for a random one.'; }
 $('#newId').oninput = updateUrlHint;
-$('#newBtn').onclick = openCreate; $('#newBtnTop').onclick = openCreate;
+$('#newBtn').onclick = $('#newBtnTop').onclick = () => (S.meta?.user ? openCreate() : showAuth('register'));
 $('#startOpts').onclick = (e) => { const b = e.target.closest('[data-start]'); if (!b) return; S.create = { start: b.dataset.start, tpl: null }; renderCreate(); };
 $('#tplGrid').onclick = (e) => { const b = e.target.closest('[data-tpl]'); if (!b) return; S.create = { start: null, tpl: b.dataset.tpl }; renderCreate();
   const t = TEMPLATES.find((x) => x.key === b.dataset.tpl); if (!$('#newName').value.trim()) $('#newName').value = t.title; };
 document.querySelectorAll('[data-close]').forEach((b) => b.onclick = () => b.closest('.modal').classList.remove('show'));
-document.querySelectorAll('.modal').forEach((m) => m.addEventListener('click', (e) => { if (e.target === m && m.id !== 'authModal') m.classList.remove('show'); }));
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#newModal').classList.remove('show'); });
+document.querySelectorAll('.modal').forEach((m) => m.addEventListener('click', (e) => { if (e.target === m) m.classList.remove('show'); }));
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') document.querySelectorAll('.modal.show').forEach((m) => m.classList.remove('show')); });
 $('#createBtn').onclick = async () => {
   const btn = $('#createBtn'); btn.disabled = true;
   try {
@@ -728,7 +805,7 @@ function renderTabbar() {
 // ---------- Requests ----------
 function filtered() {
   const q = S.filter.q.toLowerCase(), m = S.filter.method;
-  return S.reqs.filter((r) => (!m || r.method === m) && (!q || (r.path + ' ' + qsOf(r.query) + ' ' + (r.body || '') + ' ' + r.ip).toLowerCase().includes(q)));
+  return S.reqs.filter((r) => (!m || r.method === m) && (!q || (r.path + ' ' + qsOf(r.query) + ' ' + searchText(r) + ' ' + r.ip).toLowerCase().includes(q)));
 }
 function renderRequests(freshIds = new Set()) {
   const body = $('#tabBody'); if (!body || S.tab !== 'requests') return;
@@ -756,7 +833,7 @@ function renderRequests(freshIds = new Set()) {
       <div class="card" style="overflow:hidden">
         <div class="toolbar">
           <div class="search">${ico('search')}<input type="text" id="reqSearch" placeholder="Search path, query or body" value="${esc(S.filter.q)}"></div>
-          <select id="reqMethod" style="width:auto;min-width:130px"><option value="">All methods</option>${methods.map((m) => `<option ${S.filter.method === m ? 'selected' : ''}>${m}</option>`).join('')}</select>
+          <select id="reqMethod" style="width:auto;min-width:130px"><option value="">All methods</option>${methods.map((m) => `<option ${S.filter.method === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select>
         </div>
         <div class="toolbar" style="justify-content:space-between">
           <span class="statusline ${S.live ? '' : 'off'}" id="liveStatus"><span class="dot"></span>${S.live ? 'Auto-refreshing every 5s' : (S.lastCheck ? 'Last checked ' + ago(S.lastCheck) : 'Tap Refresh to check for new requests')}</span>
@@ -794,6 +871,7 @@ function renderRequests(freshIds = new Set()) {
     $('#copyCurl').onclick = () => copy(toCurl(r), 'cURL copied');
     $('#detailTabs').onclick = (e) => { const b = e.target.closest('button'); if (b) { S.detailTab = b.dataset.d; renderRequests(); } };
     const cb = $('#copyBody'); if (cb) cb.onclick = () => copy(r.body, 'Body copied');
+    const dl = $('#dlBody'); if (dl) dl.onclick = () => downloadBody(r);
   }
 }
 
@@ -802,18 +880,31 @@ function kvList(obj) {
   if (!e.length) return '<p class="help" style="margin:0">None</p>';
   return `<div class="kv">${e.map(([k, v]) => `<div class="r"><span class="k">${esc(k)}</span><span class="v">${esc(typeof v === 'object' ? JSON.stringify(v) : v)}</span></div>`).join('')}</div>`;
 }
+// A body that wasn't text is stored as base64. These give back its bytes.
+const isBinary = (r) => r.encoding === 'base64';
+const bytesOf = (r) => Uint8Array.from(atob(r.body), (c) => c.charCodeAt(0));
+const utf8 = (latin1) => { try { return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(latin1, (c) => c.charCodeAt(0))); } catch { return latin1; } };
+const searchText = (r) => (isBinary(r) ? '' : r.body || '');
+function downloadBody(r) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([isBinary(r) ? bytesOf(r) : r.body], { type: (r.contentType || 'application/octet-stream').split(';')[0] }));
+  a.download = `request-${r.id}.bin`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
 // Form fields from a multipart body, so the boundary lines don't read as data.
 function multipartFields(r) {
   const b = /multipart\/form-data/i.test(r.contentType || '') && /boundary=(?:"([^"]+)"|([^;\s]+))/i.exec(r.contentType);
   if (!b) return null;
   const out = [];
-  for (const part of r.body.split('--' + (b[1] || b[2])).slice(1)) {
+  // An uploaded file makes the whole body binary; read it byte for byte and decode each text field.
+  const raw = isBinary(r) ? atob(r.body) : r.body, text = isBinary(r) ? utf8 : (v) => v;
+  for (const part of raw.split('--' + (b[1] || b[2])).slice(1)) {
     if (part.startsWith('--')) break;
     const cut = part.search(/\r?\n\r?\n/); if (cut < 0) continue;
     const head = part.slice(0, cut), value = part.slice(cut).replace(/^\r?\n\r?\n/, '').replace(/\r?\n$/, '');
     const name = /\bname="([^"]*)"/i.exec(head); if (!name) continue;
     const file = /\bfilename="([^"]*)"/i.exec(head);
-    out.push([name[1], file ? `File: ${file[1] || 'unnamed'} (${(/content-type:\s*([^\r\n]+)/i.exec(head) || [])[1] || 'unknown type'})` : value]);
+    out.push([text(name[1]), file ? `File: ${text(file[1]) || 'unnamed'} (${(/content-type:\s*([^\r\n]+)/i.exec(head) || [])[1] || 'unknown type'}, ${value.length.toLocaleString()} bytes)` : text(value)]);
   }
   return out.length ? out : null;
 }
@@ -821,7 +912,8 @@ function prettyBody(r) {
   if (!r.body) return '<p class="help" style="margin:0">Empty body</p>';
   const cutOff = r.truncated ? '<p class="help">The body was cut off because it was too large to store in full.</p>' : '';
   const fields = multipartFields(r);
-  if (fields) return `${kvList(fields)}<p class="help">Form fields from the multipart body. Copy gives the raw body.</p>${cutOff}`;
+  if (fields) return `${kvList(fields)}<p class="help">Form fields from the multipart body. ${isBinary(r) ? 'Download' : 'Copy'} gives the raw body.</p>${cutOff}`;
+  if (isBinary(r)) return `<p class="help" style="margin:0">This body isn't text, so it is kept as the original bytes. Use Download to save it exactly as it was sent.</p>${cutOff}`;
   let txt = r.body;
   try { txt = JSON.stringify(JSON.parse(r.body), null, 2); } catch {
     if ((r.contentType || '').includes('x-www-form-urlencoded')) { try { txt = JSON.stringify(Object.fromEntries(new URLSearchParams(r.body)), null, 2); } catch {} }
@@ -846,7 +938,7 @@ function requestDetail(r) {
       <button data-d="headers" class="${d === 'headers' ? 'on' : ''}">Headers <span class="count">${nh}</span></button>
     </div></div>
     <div style="padding:16px 20px 20px">
-      ${d === 'body' ? `${r.body ? `<div class="row" style="justify-content:space-between;margin-bottom:10px"><span class="muted" style="font-size:13px">${esc(r.contentType || 'No content type')}</span><button class="link" id="copyBody">${ico('copy')}Copy</button></div>` : ''}${prettyBody(r)}`
+      ${d === 'body' ? `${r.body ? `<div class="row" style="justify-content:space-between;margin-bottom:10px"><span class="muted" style="font-size:13px">${esc(r.contentType || 'No content type')}</span>${isBinary(r) ? `<button class="link" id="dlBody">${ico('arrow-in')}Download</button>` : `<button class="link" id="copyBody">${ico('copy')}Copy</button>`}</div>` : ''}${prettyBody(r)}`
         : d === 'query' ? kvList(r.query) : kvList(r.headers)}
     </div>`;
 }
@@ -855,7 +947,8 @@ function toCurl(r) {
   let s = `curl -X ${r.method} '${hookUrl(S.cfg.id)}${r.path === '/' ? '' : r.path}${q ? '?' + q : ''}'`;
   const skip = /^(host|content-length|connection|accept-encoding|via|cdn-loop|cf-|x-amz)/i;
   for (const [k, v] of Object.entries(r.headers || {})) if (!skip.test(k)) s += ` \\\n  -H '${k}: ${String(v).replace(/'/g, "'\\''")}'`;
-  if (r.body) s += ` \\\n  --data-raw '${r.body.replace(/'/g, "'\\''")}'`;
+  if (r.body && isBinary(r)) s += ` \\\n  --data-binary @request-${r.id}.bin`;
+  else if (r.body) s += ` \\\n  --data-raw '${r.body.replace(/'/g, "'\\''")}'`;
   return s;
 }
 
@@ -1091,7 +1184,7 @@ function renderResponse() {
       <div class="card-head"><h3>Reply</h3></div>
       <div class="section">
         <div class="grid">
-          <div><label class="field-label" for="rStatus">Status code <span class="req">*</span></label><input type="number" id="rStatus" min="100" max="599" value="${esc(r.status)}"></div>
+          <div><label class="field-label" for="rStatus">Status code <span class="req">*</span></label><input type="number" id="rStatus" min="200" max="599" value="${esc(r.status)}"><p class="help">200 to 599.</p></div>
           <div><label class="field-label" for="rDelay">Delay before replying</label><input type="number" id="rDelay" min="0" max="15000" step="100" value="${esc(r.delayMs || 0)}"><p class="help">In milliseconds, up to 15000.</p></div>
         </div>
         <div class="row" style="margin-top:4px">${[[200,'OK'],[201,'Created'],[204,'No content'],[400,'Bad request'],[401,'Unauthorized'],[404,'Not found'],[422,'Invalid'],[429,'Too many'],[500,'Server error'],[503,'Unavailable']]
@@ -1121,10 +1214,23 @@ function renderResponse() {
       k.oninput = () => { h.key = k.value; changed(); }; v.oninput = () => { h.value = v.value; changed(); };
       row.querySelector('button').onclick = () => { r.headers.splice(i, 1); changed(); draw(); };
       box.appendChild(row);
+      const note = document.createElement('p'); note.className = 'help'; note.style.cssText = 'margin:-2px 0 4px;color:var(--red-text)';
+      const check = () => { const why = headerProblem(h); note.textContent = why; note.classList.toggle('hidden', !why); };
+      k.addEventListener('input', check); v.addEventListener('input', check); check();
+      box.appendChild(note);
     });
   };
   $('#hAdd').onclick = () => { r.headers.push({ key: '', value: '' }); changed(); draw(); };
   draw();
+}
+// Why a response header can't be sent, or '' when it is fine. The server leaves such headers out.
+function headerProblem(h) {
+  const k = (h.key || '').trim();
+  if (!k) return '';
+  if (!/^[A-Za-z0-9!#$%&'*+.^_`|~-]+$/.test(k)) return 'This name has characters a header can\'t use (spaces, for example), so it will be left out.';
+  if (/^(content-length|transfer-encoding|connection|keep-alive|upgrade|trailer|te)$/i.test(k)) return 'The server sets this header itself, so it will be left out.';
+  if (/[^\t\x20-\x7e\x80-\xff]/.test(h.value || '')) return 'This value has a line break or another character a header can\'t carry, so it will be left out.';
+  return '';
 }
 
 // ---------- Test ----------
@@ -1196,6 +1302,7 @@ function showResult() {
     <div class="card-head"><div class="result-head"><h3>${esc(r.label)}</h3>${statusBadge(r.status)}${r.ms != null ? `<span class="muted" style="font-size:13px">${r.ms} ms</span>` : ''}</div>
       <button class="btn sm" id="tCopy">${ico('copy')}Copy body</button></div>
     ${r.note ? `<div class="section" style="padding-bottom:0"><div class="banner warn" style="margin:0">${ico('alert')}<div>${esc(r.note)}</div></div></div>` : ''}
+    ${r.skippedHeaders?.length ? `<div class="section" style="padding-bottom:0"><div class="banner warn" style="margin:0">${ico('alert')}<div>Left out because they can't be sent as headers: ${esc(r.skippedHeaders.join(', '))}. Fix them in Settings.</div></div></div>` : ''}
     ${interesting.length ? `<div class="section"><h4 style="margin-bottom:10px">Headers</h4>${kvList(Object.fromEntries(interesting))}</div>` : ''}
     <div class="section"><h4 style="margin-bottom:10px">Body</h4><pre class="code">${esc(pretty)}</pre></div></div>`;
   $('#tCopy').onclick = () => copy(r.body, 'Body copied');
